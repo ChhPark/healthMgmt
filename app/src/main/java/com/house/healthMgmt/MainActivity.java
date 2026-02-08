@@ -1,68 +1,121 @@
 package com.house.healthMgmt;
 
-import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import java.util.ArrayList;
-import java.util.List;
 import android.content.Intent;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import android.os.Bundle;
+import android.util.Log;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    private RecyclerView recyclerView;
-    private HealthAdapter adapter;
-    private List<HealthItem> healthItems;
+    private TextView tvDateTitle;
+    private TextView tvProteinValue; // [수정] 원형 텍스트뷰 연결
+    private SupabaseApi apiService;
+    private String todayDate;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-		// --- [여기서부터 추가] 에러 감지 코드 시작 ---
-        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread thread, Throwable throwable) {
-                // 1. 에러 내용을 문자열로 변환
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                throwable.printStackTrace(pw);
-                String errorLog = sw.toString();
-
-                // 2. ErrorActivity로 이동하면서 에러 내용 전달
-                Intent intent = new Intent(MainActivity.this, ErrorActivity.class);
-                intent.putExtra("error_log", errorLog);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                startActivity(intent);
-
-                // 3. 현재 프로세스 강제 종료 (안 하면 앱이 멈춤)
-                android.os.Process.killProcess(android.os.Process.myPid());
-                System.exit(1);
-            }
-        });
-        // --- [여기까지 추가] 에러 감지 코드 끝 ---
-		
         setContentView(R.layout.activity_main);
 
-        recyclerView = findViewById(R.id.recyclerView);
-        
-        // 2열 그리드 레이아웃 설정
-        recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
+        // UI 연결
+        tvDateTitle = findViewById(R.id.tv_date_title);
+        tvProteinValue = findViewById(R.id.tv_protein_value); // 단백질 카드 안의 원형 텍스트
 
-        // 데이터 초기화 (색상 코드 추가!)
-        healthItems = new ArrayList<>();
-        
-        // 여기를 아래와 같이 색상 코드("#......")가 포함되도록 수정해야 합니다.
-        healthItems.add(new HealthItem("단백질", false, "#009688")); // 청록
-        healthItems.add(new HealthItem("나트륨", true, "#FF9800"));  // 주황
-        healthItems.add(new HealthItem("물", false, "#2196F3"));     // 파랑
-        healthItems.add(new HealthItem("No 음료수", true, "#F44336")); // 빨강
-        healthItems.add(new HealthItem("No 술", true, "#9C27B0"));   // 보라
-        healthItems.add(new HealthItem("수면", false, "#3F51B5"));   // 남색
-        healthItems.add(new HealthItem("운동", true, "#4CAF50"));    // 초록
+        apiService = SupabaseClient.getApi(this);
 
-        // 어댑터 연결
-        adapter = new HealthAdapter(healthItems);
-        recyclerView.setAdapter(adapter);
+        // 오늘 날짜 구하기
+        todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+        // 1. 헤더 날짜 업데이트
+        updateDateHeader();
+
+        // 2. 단백질 카드 클릭 리스너
+        findViewById(R.id.card_protein).setOnClickListener(v -> {
+            startActivity(new Intent(this, ProteinActivity.class));
+        });
+
+        // (다른 카드 클릭 리스너는 필요 시 추가)
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 화면이 다시 보일 때마다 목표 달성 여부 체크
+        checkProteinGoal();
+    }
+
+    private void updateDateHeader() {
+        String displayDate = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA).format(new Date());
+        tvDateTitle.setText(displayDate);
+    }
+
+    // 단백질 목표 달성 체크 로직
+    private void checkProteinGoal() {
+        // 1. 최신 체중 가져오기
+        apiService.getLatestWeight().enqueue(new Callback<List<WeightLog>>() {
+            @Override
+            public void onResponse(Call<List<WeightLog>> call, Response<List<WeightLog>> response) {
+                if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
+                    double weight = response.body().get(0).getWeight();
+                    calculateProteinStatus(weight);
+                } else {
+                    // 체중 기록 없으면 판단 불가 (-)
+                    tvProteinValue.setText("-");
+                }
+            }
+            @Override
+            public void onFailure(Call<List<WeightLog>> call, Throwable t) {}
+        });
+    }
+
+    private void calculateProteinStatus(double weight) {
+        // 목표: 체중 * 0.7 (반올림)
+        int goalLimit = (int) Math.round(weight * 0.7);
+
+        // 2. 오늘 먹은 단백질 총량 가져오기
+        String dateQuery = "eq." + todayDate;
+        apiService.getTodayLogs(dateQuery).enqueue(new Callback<List<ProteinLog>>() {
+            @Override
+            public void onResponse(Call<List<ProteinLog>> call, Response<List<ProteinLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalProtein = 0;
+                    for (ProteinLog log : response.body()) {
+                        totalProtein += log.getProteinAmount();
+                    }
+
+                    // 3. 비교 (목표 '이하' 섭취 시 성공)
+                    boolean isSuccess = totalProtein <= goalLimit;
+
+                    // 4. UI 업데이트 (원 안에 O 또는 X 표시)
+                    tvProteinValue.setText(isSuccess ? "O" : "X");
+
+                    // 5. DB 저장
+                    saveDailyResult(isSuccess);
+                }
+            }
+            @Override
+            public void onFailure(Call<List<ProteinLog>> call, Throwable t) {}
+        });
+    }
+
+    private void saveDailyResult(boolean proteinSuccess) {
+        DailySummary summary = new DailySummary(todayDate, "user_01", proteinSuccess);
+        
+        apiService.upsertDailySummary(summary).enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {}
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e("MainActivity", "Save Error", t);
+            }
+        });
     }
 }

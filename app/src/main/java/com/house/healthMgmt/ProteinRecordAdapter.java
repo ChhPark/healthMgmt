@@ -17,7 +17,6 @@ public class ProteinRecordAdapter extends ArrayAdapter<ProteinLog> {
     private List<ProteinLog> logs;
     private OnRecordActionListener listener;
 
-    // 클릭 이벤트를 전달할 인터페이스 정의
     public interface OnRecordActionListener {
         void onEdit(ProteinLog log);
         void onDelete(ProteinLog log);
@@ -33,28 +32,27 @@ public class ProteinRecordAdapter extends ArrayAdapter<ProteinLog> {
     @NonNull
     @Override
     public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-        // 레이아웃이 없으면 생성
         if (convertView == null) {
             convertView = LayoutInflater.from(context).inflate(R.layout.item_protein_record, parent, false);
         }
 
-        // 현재 데이터 가져오기
         ProteinLog log = logs.get(position);
 
-        // 뷰 연결
-        TextView tvInfo = convertView.findViewById(R.id.tv_record_info);
+        // 1. 뷰 연결 (새로운 ID 사용)
+        TextView tvFoodName = convertView.findViewById(R.id.tv_food_name);
+        TextView tvAmount = convertView.findViewById(R.id.tv_protein_amt);
         ImageView ivEdit = convertView.findViewById(R.id.iv_edit);
         ImageView ivDelete = convertView.findViewById(R.id.iv_delete);
 
-        // 데이터 표시
-        tvInfo.setText(log.getFoodType() + " : " + log.getProteinAmount() + "g");
+        // 2. 데이터 설정
+        tvFoodName.setText(log.getFoodType()); // 음식 이름
+        tvAmount.setText(String.valueOf(log.getProteinAmount())); // 숫자만 표시
 
-        // 수정 버튼 클릭 시
+        // 3. 버튼 이벤트
         ivEdit.setOnClickListener(v -> {
             if (listener != null) listener.onEdit(log);
         });
 
-        // 삭제 버튼 클릭 시
         ivDelete.setOnClickListener(v -> {
             if (listener != null) listener.onDelete(log);
         });
