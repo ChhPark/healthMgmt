@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#FFFFFF">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="앱 에러 발생"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#D32F2F"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/btn_copy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="로그 복사하기"
+        android:backgroundTint="#000000"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="10dp"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F0F0F0"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/tv_error_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="로그 내용이 여기에 표시됩니다..."
+            android:textColor="#333333"
+            android:fontFamily="monospace"/>
+    </ScrollView>
+</LinearLayout>

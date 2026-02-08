@@ -40,6 +40,22 @@ public class HealthAdapter extends RecyclerView.Adapter<HealthAdapter.ViewHolder
         GradientDrawable bgShape = (GradientDrawable) holder.viewIconBg.getBackground();
         // 아이템에 지정된 색상 코드로 배경색 설정
         bgShape.setColor(Color.parseColor(item.getColorCode()));
+		
+	        // --- [추가된 부분 시작] ---
+        // 카드 전체에 클릭 리스너 설정
+        holder.itemView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // 항목 이름이 "단백질"이면 ProteinActivity로 이동
+                if (item.getTitle().equals("단백질")) {
+                    android.content.Context context = v.getContext();
+                    android.content.Intent intent = new android.content.Intent(context, ProteinActivity.class);
+                    context.startActivity(intent);
+                }
+                // 추후 다른 항목(물, 나트륨 등)도 여기서 else if로 추가하면 됩니다.
+            }
+        });
+        // --- [추가된 부분 끝] ---
     }
 
     @Override
