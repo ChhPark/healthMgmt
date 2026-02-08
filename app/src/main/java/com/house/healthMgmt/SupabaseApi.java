@@ -2,19 +2,46 @@ package com.house.healthMgmt;
 
 import java.util.List;
 import java.util.Map;
-
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.DELETE;
 import retrofit2.http.GET;
-import retrofit2.http.Headers; // [중요] 이 줄이 빠져서 에러가 났습니다.
 import retrofit2.http.PATCH;
 import retrofit2.http.POST;
 import retrofit2.http.Query;
 
 public interface SupabaseApi {
 
-    // --- [1. 단백질 기록 관련] ---
+    // --- [1. 체중 관련] ---
+    @GET("/rest/v1/health_weight?select=*&order=record_date.desc&limit=1")
+    Call<List<WeightLog>> getLatestWeight();
+
+    @POST("/rest/v1/health_weight")
+    Call<Void> insertWeight(@Body WeightLog log);
+
+    @GET("/rest/v1/health_weight?select=*&order=record_date.desc")
+    Call<List<WeightLog>> getWeightLogs();
+
+    // --- [2. 음식/물 종류 관리] ---
+    @GET("/rest/v1/health_food_type?select=*&order=id.asc")
+    Call<List<FoodType>> getFoodTypes();
+
+    @POST("/rest/v1/health_food_type")
+    Call<Void> insertFoodType(@Body FoodType type);
+
+    @DELETE("/rest/v1/health_food_type")
+    Call<Void> deleteFoodType(@Query("id") String idQuery);
+
+    @GET("/rest/v1/health_water_type?select=*&order=id.asc")
+    Call<List<WaterType>> getWaterTypes();
+
+    @POST("/rest/v1/health_water_type")
+    Call<Void> insertWaterType(@Body WaterType type);
+
+    @DELETE("/rest/v1/health_water_type")
+    Call<Void> deleteWaterType(@Query("id") String idQuery);
+
+    // --- [3. 단백질 기록] ---
     @POST("/rest/v1/health_protein")
     Call<Void> insertProtein(@Body ProteinLog log);
 
@@ -27,35 +54,8 @@ public interface SupabaseApi {
     @PATCH("/rest/v1/health_protein")
     Call<Void> updateProtein(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
 
-
-    // --- [2. 음식 종류 관리] ---
-    @GET("/rest/v1/health_food_type?select=*&order=id.asc")
-    Call<List<FoodType>> getFoodTypes();
-
-    @POST("/rest/v1/health_food_type")
-    Call<Void> insertFoodType(@Body FoodType food);
-
-    @DELETE("/rest/v1/health_food_type")
-    Call<Void> deleteFoodType(@Query("id") String idQuery);
-
-
-    // --- [3. 체중 관리] ---
-    @POST("/rest/v1/health_weight")
-    Call<Void> insertWeight(@Body WeightLog log);
-
-    @GET("/rest/v1/health_weight?select=*&order=record_date.desc,created_at.desc&limit=1")
-    Call<List<WeightLog>> getLatestWeight();
-
-    @GET("/rest/v1/health_weight?select=*&order=record_date.desc,created_at.desc")
-    Call<List<WeightLog>> getWeightLogs();
-
-
-    // --- [4. 일일 요약 (대시보드 O/X)] ---
-    @Headers("Prefer: resolution=merge-duplicates")
-    @POST("/rest/v1/health_daily_summary")
-    Call<Void> upsertDailySummary(@Body DailySummary summary);
-	
-	@POST("/rest/v1/health_sodium")
+    // --- [4. 나트륨 기록] ---
+    @POST("/rest/v1/health_sodium")
     Call<Void> insertSodium(@Body SodiumLog log);
 
     @GET("/rest/v1/health_sodium?select=*&order=id.asc")
@@ -66,8 +66,9 @@ public interface SupabaseApi {
 
     @PATCH("/rest/v1/health_sodium")
     Call<Void> updateSodium(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
-	
-	@POST("/rest/v1/health_water")
+
+    // --- [5. 물 기록] ---
+    @POST("/rest/v1/health_water")
     Call<Void> insertWater(@Body WaterLog log);
 
     @GET("/rest/v1/health_water?select=*&order=id.asc")
@@ -78,13 +79,26 @@ public interface SupabaseApi {
 
     @PATCH("/rest/v1/health_water")
     Call<Void> updateWater(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
+
+    // --- [6. 음료수(NoBeverage) 기록] --- (이 부분이 없어서 에러 발생했음)
+    @POST("/rest/v1/health_beverage")
+    Call<Void> insertBeverage(@Body BeverageLog log);
+
+    @GET("/rest/v1/health_beverage?select=*&order=id.asc")
+    Call<List<BeverageLog>> getTodayBeverageLogs(@Query("record_date") String dateQuery);
+
+    @DELETE("/rest/v1/health_beverage")
+    Call<Void> deleteBeverage(@Query("id") String idQuery);
+
+    @PATCH("/rest/v1/health_beverage")
+    Call<Void> updateBeverage(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
 	
-	@GET("/rest/v1/health_water_type?select=*&order=id.asc")
-    Call<List<WaterType>> getWaterTypes();
+	@GET("/rest/v1/health_beverage_type?select=*&order=id.asc")
+    Call<List<BeverageType>> getBeverageTypes();
 
-    @POST("/rest/v1/health_water_type")
-    Call<Void> insertWaterType(@Body WaterType type);
+    @POST("/rest/v1/health_beverage_type")
+    Call<Void> insertBeverageType(@Body BeverageType type);
 
-    @DELETE("/rest/v1/health_water_type")
-    Call<Void> deleteWaterType(@Query("id") String idQuery);
+    @DELETE("/rest/v1/health_beverage_type")
+    Call<Void> deleteBeverageType(@Query("id") String idQuery);
 }

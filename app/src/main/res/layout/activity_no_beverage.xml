@@ -21,7 +21,7 @@
             android:layout_height="wrap_content"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#FFB300"
+            app:cardBackgroundColor="#F44336"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
@@ -35,7 +35,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="나트륨 섭취량"
+                    android:text="음료수 섭취량"
                     android:textColor="#FFFFFF"
                     android:textSize="20sp"
                     android:textStyle="bold"/>
@@ -47,7 +47,7 @@
                     android:layout_marginTop="4dp">
 
                     <TextView
-                        android:id="@+id/tv_total_sodium"
+                        android:id="@+id/tv_total_beverage"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="0"
@@ -58,7 +58,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="mg"
+                        android:text="cc"
                         android:textColor="#FFFFFF"
                         android:textSize="20sp"
                         android:layout_gravity="bottom"
@@ -69,7 +69,7 @@
                     android:id="@+id/tv_goal"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="목표: 2,000mg 이하"
+                    android:text="목표: 0cc (금지)"
                     android:textColor="#CCFFFFFF"
                     android:textSize="13sp"
                     android:layout_marginTop="2dp"
@@ -89,11 +89,11 @@
                 android:layout_width="0dp"
                 android:layout_height="45dp"
                 android:layout_weight="1"
-                android:text="+100mg"
+                android:text="+100cc"
                 android:maxLines="1"
                 android:textAllCaps="false"
-                android:textColor="#E65100"
-                android:backgroundTint="#FFF3E0"
+                android:textColor="#C62828"
+                android:backgroundTint="#FFEBEE"
                 android:layout_marginEnd="4dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
@@ -106,11 +106,11 @@
                 android:layout_width="0dp"
                 android:layout_height="45dp"
                 android:layout_weight="1"
-                android:text="+500mg"
+                android:text="+500cc"
                 android:maxLines="1"
                 android:textAllCaps="false"
-                android:textColor="#E65100"
-                android:backgroundTint="#FFE0B2"
+                android:textColor="#C62828"
+                android:backgroundTint="#FFCDD2"
                 android:layout_marginEnd="4dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
@@ -123,12 +123,12 @@
                 android:layout_width="0dp"
                 android:layout_height="45dp"
                 android:layout_weight="1"
-                android:text="+1,000mg"
-                android:textSize="11sp"
+                android:text="+1,000cc"
+                android:textSize="13sp"
                 android:maxLines="1"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:backgroundTint="#FFCC80"
+                android:backgroundTint="#E57373"
                 android:layout_marginEnd="4dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
@@ -161,7 +161,7 @@
             android:layout_marginBottom="16dp">
 
             <Spinner
-                android:id="@+id/spinner_food_type"
+                android:id="@+id/spinner_beverage_type"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
                 android:layout_weight="1"
@@ -171,7 +171,7 @@
                 android:textAlignment="center"/>
 
             <EditText
-                android:id="@+id/et_sodium_input"
+                android:id="@+id/et_beverage_input"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
                 android:layout_weight="1"
@@ -194,7 +194,7 @@
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#FFB300"
+            android:backgroundTint="#F44336"
             app:cornerRadius="16dp"/>
 
     </LinearLayout>

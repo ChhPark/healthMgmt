@@ -35,6 +35,12 @@
 		<activity android:name=".WaterTargetActivity" />
 		
 		<activity android:name=".WaterTypeActivity" />
+		
+		<activity android:name=".NoBeverageActivity" />
+		
+		<activity android:name=".BeverageTypeActivity" />
+
+
 
 
 

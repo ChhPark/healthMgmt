@@ -90,7 +90,6 @@
                 android:layout_height="45dp"
                 android:layout_weight="1"
                 android:text="+100cc"
-                android:textSize="10sp"
                 android:maxLines="1"
                 android:textAllCaps="false"
                 android:textColor="#0D47A1"
@@ -100,8 +99,6 @@
                 android:insetBottom="0dp"
                 android:insetLeft="0dp"
                 android:insetRight="0dp"
-                app:autoSizeTextType="uniform"
-                app:autoSizeMinTextSize="6sp"
                 style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
 
             <Button
@@ -110,7 +107,6 @@
                 android:layout_height="45dp"
                 android:layout_weight="1"
                 android:text="+500cc"
-                android:textSize="10sp"
                 android:maxLines="1"
                 android:textAllCaps="false"
                 android:textColor="#0D47A1"
@@ -120,8 +116,6 @@
                 android:insetBottom="0dp"
                 android:insetLeft="0dp"
                 android:insetRight="0dp"
-                app:autoSizeTextType="uniform"
-                app:autoSizeMinTextSize="6sp"
                 style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
 
             <Button
@@ -130,7 +124,7 @@
                 android:layout_height="45dp"
                 android:layout_weight="1"
                 android:text="+1,000cc"
-                android:textSize="10sp"
+                android:textSize="13sp"
                 android:maxLines="1"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
@@ -140,8 +134,6 @@
                 android:insetBottom="0dp"
                 android:insetLeft="0dp"
                 android:insetRight="0dp"
-                app:autoSizeTextType="uniform"
-                app:autoSizeMinTextSize="5sp"
                 style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
 
             <Button

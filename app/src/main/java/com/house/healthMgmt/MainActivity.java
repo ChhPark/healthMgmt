@@ -1,8 +1,8 @@
 package com.house.healthMgmt;
 
-import android.content.Context; // 추가됨
+import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences; // 추가됨
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
@@ -18,9 +18,10 @@ import retrofit2.Response;
 public class MainActivity extends AppCompatActivity {
 
     private TextView tvDateTitle;
-    private TextView tvProteinValue; // 단백질 O/X
-    private TextView tvSodiumValue;  // 나트륨 O/X
-    private TextView tvWaterValue;   // 물 O/X
+    private TextView tvProteinValue;     // 단백질 O/X
+    private TextView tvSodiumValue;      // 나트륨 O/X
+    private TextView tvWaterValue;       // 물 O/X
+    private TextView tvNoBeverageValue;  // No음료수 O/X (추가됨)
     
     private SupabaseApi apiService;
     private String todayDate;
@@ -35,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
         tvProteinValue = findViewById(R.id.tv_protein_value);
         tvSodiumValue = findViewById(R.id.tv_sodium_value);
         tvWaterValue = findViewById(R.id.tv_water_value);
+        tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value); // XML ID 필요
 
         apiService = SupabaseClient.getApi(this);
 
@@ -60,15 +62,21 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.card_water).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, WaterActivity.class));
         });
+
+        // [No음료수] (추가됨)
+        findViewById(R.id.card_no_beverage).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, NoBeverageActivity.class));
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // 화면이 다시 보일 때마다 데이터 갱신
+        // 화면이 다시 보일 때마다 모든 데이터 갱신
         checkProteinGoal();
         checkSodiumGoal();
         checkWaterGoal();
+        checkBeverageGoal(); // 음료수 체크 추가
     }
 
     private void updateDateHeader() {
@@ -97,8 +105,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void calculateProteinStatus(double weight) {
         int goalLimit = (int) Math.round(weight * 0.7);
-
         String dateQuery = "eq." + todayDate;
+
         apiService.getTodayLogs(dateQuery).enqueue(new Callback<List<ProteinLog>>() {
             @Override
             public void onResponse(Call<List<ProteinLog>> call, Response<List<ProteinLog>> response) {
@@ -120,8 +128,8 @@ public class MainActivity extends AppCompatActivity {
     // --- [2. 나트륨 목표 달성 체크 (2,000mg 이하)] ---
     private void checkSodiumGoal() {
         int sodiumGoal = 2000;
-
         String dateQuery = "eq." + todayDate;
+
         apiService.getTodaySodiumLogs(dateQuery).enqueue(new Callback<List<SodiumLog>>() {
             @Override
             public void onResponse(Call<List<SodiumLog>> call, Response<List<SodiumLog>> response) {
@@ -142,11 +150,10 @@ public class MainActivity extends AppCompatActivity {
 
     // --- [3. 물 목표 달성 체크 (설정값 이상)] ---
     private void checkWaterGoal() {
-        // 저장된 목표값 가져오기 (기본값 2000)
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int waterGoal = prefs.getInt("water_target", 2000);
-
+        int waterGoal = prefs.getInt("water_target", 2000); // 기본값 2000
         String dateQuery = "eq." + todayDate;
+
         apiService.getTodayWaterLogs(dateQuery).enqueue(new Callback<List<WaterLog>>() {
             @Override
             public void onResponse(Call<List<WaterLog>> call, Response<List<WaterLog>> response) {
@@ -155,15 +162,37 @@ public class MainActivity extends AppCompatActivity {
                     for (WaterLog log : response.body()) {
                         totalWater += log.getWaterAmount();
                     }
-                    // 목표량 '이상'이면 성공 (O)
+                    // 목표량 '이상'이면 성공
                     boolean isSuccess = totalWater >= waterGoal;
                     tvWaterValue.setText(isSuccess ? "O" : "X");
                 }
             }
             @Override
-            public void onFailure(Call<List<WaterLog>> call, Throwable t) {
-                 Log.e("MainActivity", "Water Error", t);
+            public void onFailure(Call<List<WaterLog>> call, Throwable t) {}
+        });
+    }
+
+    // --- [4. No음료수 목표 달성 체크 (0cc 유지)] ---
+    private void checkBeverageGoal() {
+        // 목표: 0cc (마시면 안 됨)
+        String dateQuery = "eq." + todayDate;
+
+        apiService.getTodayBeverageLogs(dateQuery).enqueue(new Callback<List<BeverageLog>>() {
+            @Override
+            public void onResponse(Call<List<BeverageLog>> call, Response<List<BeverageLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalBeverage = 0;
+                    for (BeverageLog log : response.body()) {
+                        totalBeverage += log.getAmount();
+                    }
+                    
+                    // 하나도 안 마셨으면(0) 성공(O), 마셨으면(>0) 실패(X)
+                    boolean isSuccess = totalBeverage == 0;
+                    tvNoBeverageValue.setText(isSuccess ? "O" : "X");
+                }
             }
+            @Override
+            public void onFailure(Call<List<BeverageLog>> call, Throwable t) {}
         });
     }
 }
