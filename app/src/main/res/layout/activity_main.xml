@@ -17,7 +17,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
-            android:text="2026년 02월 08일"
+            android:text="2026년 02월 09일"
             android:textColor="#333333"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -196,6 +196,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_no_alcohol"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_columnWeight="1"
@@ -211,6 +212,7 @@
                     android:padding="24dp">
 
                     <TextView
+                        android:id="@+id/tv_no_alcohol_value"
                         android:layout_width="80dp"
                         android:layout_height="80dp"
                         android:background="@drawable/bg_circle"

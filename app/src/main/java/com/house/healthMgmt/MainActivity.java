@@ -21,7 +21,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvProteinValue;     // 단백질 O/X
     private TextView tvSodiumValue;      // 나트륨 O/X
     private TextView tvWaterValue;       // 물 O/X
-    private TextView tvNoBeverageValue;  // No음료수 O/X (추가됨)
+    private TextView tvNoBeverageValue;  // No음료수 O/X
+    private TextView tvNoAlcoholValue;   // No술 O/X (추가됨)
     
     private SupabaseApi apiService;
     private String todayDate;
@@ -36,7 +37,8 @@ public class MainActivity extends AppCompatActivity {
         tvProteinValue = findViewById(R.id.tv_protein_value);
         tvSodiumValue = findViewById(R.id.tv_sodium_value);
         tvWaterValue = findViewById(R.id.tv_water_value);
-        tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value); // XML ID 필요
+        tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
+        tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value); // XML ID 필요
 
         apiService = SupabaseClient.getApi(this);
 
@@ -63,9 +65,14 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(MainActivity.this, WaterActivity.class));
         });
 
-        // [No음료수] (추가됨)
+        // [No음료수]
         findViewById(R.id.card_no_beverage).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, NoBeverageActivity.class));
+        });
+
+        // [No술] (추가됨)
+        findViewById(R.id.card_no_alcohol).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, NoAlcoholActivity.class));
         });
     }
 
@@ -76,7 +83,8 @@ public class MainActivity extends AppCompatActivity {
         checkProteinGoal();
         checkSodiumGoal();
         checkWaterGoal();
-        checkBeverageGoal(); // 음료수 체크 추가
+        checkBeverageGoal();
+        checkAlcoholGoal(); // 술 체크 추가
     }
 
     private void updateDateHeader() {
@@ -174,25 +182,45 @@ public class MainActivity extends AppCompatActivity {
 
     // --- [4. No음료수 목표 달성 체크 (0cc 유지)] ---
     private void checkBeverageGoal() {
-        // 목표: 0cc (마시면 안 됨)
         String dateQuery = "eq." + todayDate;
-
         apiService.getTodayBeverageLogs(dateQuery).enqueue(new Callback<List<BeverageLog>>() {
             @Override
             public void onResponse(Call<List<BeverageLog>> call, Response<List<BeverageLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     int totalBeverage = 0;
                     for (BeverageLog log : response.body()) {
-                        totalBeverage += log.getAmount();
+                        // 디카페인 커피는 합산 제외 (상세 화면 로직과 동일하게 적용)
+                        if (!"디카페인 커피".equals(log.getBeverageType())) {
+                            totalBeverage += log.getAmount();
+                        }
                     }
-                    
-                    // 하나도 안 마셨으면(0) 성공(O), 마셨으면(>0) 실패(X)
                     boolean isSuccess = totalBeverage == 0;
                     tvNoBeverageValue.setText(isSuccess ? "O" : "X");
                 }
             }
             @Override
             public void onFailure(Call<List<BeverageLog>> call, Throwable t) {}
+        });
+    }
+
+    // --- [5. No술 목표 달성 체크 (0cc 유지)] ---
+    private void checkAlcoholGoal() {
+        String dateQuery = "eq." + todayDate;
+        apiService.getTodayAlcoholLogs(dateQuery).enqueue(new Callback<List<AlcoholLog>>() {
+            @Override
+            public void onResponse(Call<List<AlcoholLog>> call, Response<List<AlcoholLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalAlcohol = 0;
+                    for (AlcoholLog log : response.body()) {
+                        totalAlcohol += log.getAmount();
+                    }
+                    // 하나도 안 마셨으면(0) 성공(O)
+                    boolean isSuccess = totalAlcohol == 0;
+                    tvNoAlcoholValue.setText(isSuccess ? "O" : "X");
+                }
+            }
+            @Override
+            public void onFailure(Call<List<AlcoholLog>> call, Throwable t) {}
         });
     }
 }

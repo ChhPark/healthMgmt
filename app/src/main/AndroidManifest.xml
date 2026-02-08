@@ -39,6 +39,12 @@
 		<activity android:name=".NoBeverageActivity" />
 		
 		<activity android:name=".BeverageTypeActivity" />
+		
+		<activity android:name=".NoAlcoholActivity" />
+		
+		<activity android:name=".AlcoholTypeActivity" />
+
+
 
 
 
