@@ -21,8 +21,7 @@
             android:textColor="#333333"
             android:textSize="20sp"
             android:textStyle="bold" />
-        
-        </RelativeLayout>
+    </RelativeLayout>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -79,12 +78,14 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_sodium"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_columnWeight="1"
                 android:layout_margin="8dp"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="2dp">
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#FFFFFF">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -94,12 +95,13 @@
                     android:padding="24dp">
 
                     <TextView
+                        android:id="@+id/tv_sodium_value"
                         android:layout_width="80dp"
                         android:layout_height="80dp"
                         android:background="@drawable/bg_circle"
                         android:backgroundTint="#FFB300"
                         android:gravity="center"
-                        android:text="0"
+                        android:text="-"
                         android:textColor="#FFFFFF"
                         android:textSize="32sp"
                         android:textStyle="bold" />

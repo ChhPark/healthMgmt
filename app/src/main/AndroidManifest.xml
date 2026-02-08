@@ -27,6 +27,9 @@
         <activity android:name=".FoodActivity" />
 		
 		<activity android:name=".WeightActivity" />
+		
+		<activity android:name=".SodiumActivity" />
+
 
 
     </application>

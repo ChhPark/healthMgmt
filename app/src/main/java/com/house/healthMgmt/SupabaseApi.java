@@ -54,4 +54,16 @@ public interface SupabaseApi {
     @Headers("Prefer: resolution=merge-duplicates")
     @POST("/rest/v1/health_daily_summary")
     Call<Void> upsertDailySummary(@Body DailySummary summary);
+	
+	@POST("/rest/v1/health_sodium")
+    Call<Void> insertSodium(@Body SodiumLog log);
+
+    @GET("/rest/v1/health_sodium?select=*&order=id.asc")
+    Call<List<SodiumLog>> getTodaySodiumLogs(@Query("record_date") String dateQuery);
+
+    @DELETE("/rest/v1/health_sodium")
+    Call<Void> deleteSodium(@Query("id") String idQuery);
+
+    @PATCH("/rest/v1/health_sodium")
+    Call<Void> updateSodium(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
 }
