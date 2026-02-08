@@ -1,6 +1,8 @@
 package com.house.healthMgmt;
 
+import android.content.Context; // 추가됨
 import android.content.Intent;
+import android.content.SharedPreferences; // 추가됨
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
@@ -18,6 +20,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvDateTitle;
     private TextView tvProteinValue; // 단백질 O/X
     private TextView tvSodiumValue;  // 나트륨 O/X
+    private TextView tvWaterValue;   // 물 O/X
     
     private SupabaseApi apiService;
     private String todayDate;
@@ -30,7 +33,8 @@ public class MainActivity extends AppCompatActivity {
         // 1. UI 연결
         tvDateTitle = findViewById(R.id.tv_date_title);
         tvProteinValue = findViewById(R.id.tv_protein_value);
-        tvSodiumValue = findViewById(R.id.tv_sodium_value); // XML에 이 ID가 있어야 함
+        tvSodiumValue = findViewById(R.id.tv_sodium_value);
+        tvWaterValue = findViewById(R.id.tv_water_value);
 
         apiService = SupabaseClient.getApi(this);
 
@@ -42,26 +46,29 @@ public class MainActivity extends AppCompatActivity {
 
         // 3. 클릭 리스너 설정 (화면 이동)
         
-        // [단백질 카드] -> ProteinActivity
+        // [단백질]
         findViewById(R.id.card_protein).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, ProteinActivity.class));
         });
 
-        // [나트륨 카드] -> SodiumActivity
-        // (XML에서 나트륨 카드뷰에 android:id="@+id/card_sodium" 추가 필수)
+        // [나트륨]
         findViewById(R.id.card_sodium).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, SodiumActivity.class));
         });
 
-        // (물, 수면 등 다른 카드는 아직 구현 전이므로 토스트 메시지나 공란 처리)
+        // [물]
+        findViewById(R.id.card_water).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, WaterActivity.class));
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // 화면이 다시 보일 때마다 데이터 갱신 (상세화면에서 수정하고 왔을 때 반영)
+        // 화면이 다시 보일 때마다 데이터 갱신
         checkProteinGoal();
         checkSodiumGoal();
+        checkWaterGoal();
     }
 
     private void updateDateHeader() {
@@ -71,7 +78,6 @@ public class MainActivity extends AppCompatActivity {
 
     // --- [1. 단백질 목표 달성 체크 (체중 * 0.7)] ---
     private void checkProteinGoal() {
-        // 1) 최신 체중 가져오기
         apiService.getLatestWeight().enqueue(new Callback<List<WeightLog>>() {
             @Override
             public void onResponse(Call<List<WeightLog>> call, Response<List<WeightLog>> response) {
@@ -79,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
                     double weight = response.body().get(0).getWeight();
                     calculateProteinStatus(weight);
                 } else {
-                    tvProteinValue.setText("-"); // 체중 기록 없음
+                    tvProteinValue.setText("-");
                 }
             }
             @Override
@@ -92,7 +98,6 @@ public class MainActivity extends AppCompatActivity {
     private void calculateProteinStatus(double weight) {
         int goalLimit = (int) Math.round(weight * 0.7);
 
-        // 2) 오늘 먹은 단백질 총량
         String dateQuery = "eq." + todayDate;
         apiService.getTodayLogs(dateQuery).enqueue(new Callback<List<ProteinLog>>() {
             @Override
@@ -102,11 +107,8 @@ public class MainActivity extends AppCompatActivity {
                     for (ProteinLog log : response.body()) {
                         totalProtein += log.getProteinAmount();
                     }
-
-                    // 비교: 목표량 '이하'면 성공(O), 초과면 실패(X)
-                    // (단백질은 보통 '이상' 섭취가 목표일 수도 있으나, 질문자님 로직인 '이하' 유지)
+                    // 목표 '이하'면 성공
                     boolean isSuccess = totalProtein <= goalLimit; 
-                    
                     tvProteinValue.setText(isSuccess ? "O" : "X");
                 }
             }
@@ -117,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
 
     // --- [2. 나트륨 목표 달성 체크 (2,000mg 이하)] ---
     private void checkSodiumGoal() {
-        int sodiumGoal = 2000; // 목표: 2000mg
+        int sodiumGoal = 2000;
 
         String dateQuery = "eq." + todayDate;
         apiService.getTodaySodiumLogs(dateQuery).enqueue(new Callback<List<SodiumLog>>() {
@@ -128,16 +130,39 @@ public class MainActivity extends AppCompatActivity {
                     for (SodiumLog log : response.body()) {
                         totalSodium += log.getSodiumAmount();
                     }
-
-                    // 비교: 2000mg '이하'면 성공(O)
+                    // 2000mg '이하'면 성공
                     boolean isSuccess = totalSodium <= sodiumGoal;
-
                     tvSodiumValue.setText(isSuccess ? "O" : "X");
                 }
             }
             @Override
-            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {
-                Log.e("MainActivity", "Sodium Error", t);
+            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {}
+        });
+    }
+
+    // --- [3. 물 목표 달성 체크 (설정값 이상)] ---
+    private void checkWaterGoal() {
+        // 저장된 목표값 가져오기 (기본값 2000)
+        SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
+        int waterGoal = prefs.getInt("water_target", 2000);
+
+        String dateQuery = "eq." + todayDate;
+        apiService.getTodayWaterLogs(dateQuery).enqueue(new Callback<List<WaterLog>>() {
+            @Override
+            public void onResponse(Call<List<WaterLog>> call, Response<List<WaterLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalWater = 0;
+                    for (WaterLog log : response.body()) {
+                        totalWater += log.getWaterAmount();
+                    }
+                    // 목표량 '이상'이면 성공 (O)
+                    boolean isSuccess = totalWater >= waterGoal;
+                    tvWaterValue.setText(isSuccess ? "O" : "X");
+                }
+            }
+            @Override
+            public void onFailure(Call<List<WaterLog>> call, Throwable t) {
+                 Log.e("MainActivity", "Water Error", t);
             }
         });
     }

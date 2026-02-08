@@ -10,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="체중"
+        android:text="물 목표 설정"
         android:textSize="24sp"
         android:textStyle="bold"
         android:textColor="#333333"
@@ -20,7 +20,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="현재 체중 입력 (kg)"
+        android:text="하루 목표량 (cc)"
         android:textSize="14sp"
         android:textColor="#757575"
         android:layout_marginBottom="8dp"/>
@@ -33,66 +33,31 @@
         app:boxCornerRadiusTopEnd="12dp"
         app:boxCornerRadiusBottomStart="12dp"
         app:boxCornerRadiusBottomEnd="12dp"
-        app:boxStrokeColor="#009688"
+        app:boxStrokeColor="#2196F3" 
         app:hintEnabled="false">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/et_weight_input"
+            android:id="@+id/et_target_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:hint="예: 70.5"
+            android:inputType="number"
+            android:hint="예: 2000"
             android:textSize="16sp"
             android:textColor="#333333"
             android:paddingVertical="16dp"/>
     </com.google.android.material.textfield.TextInputLayout>
 
     <Button
-        android:id="@+id/btn_save_weight"
+        android:id="@+id/btn_save_target"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:text="저장하기"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:textColor="#FFFFFF" 
-        android:backgroundTint="#009688"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2196F3" 
         app:cornerRadius="12dp"
         android:layout_marginTop="24dp"
         android:stateListAnimator="@null"/>
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="단백질 목표 : 체중 × 0.7"
-        android:textColor="#009688"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="24dp"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="이전 기록"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="#333333"
-        android:layout_marginBottom="8dp"/>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#EEEEEE"
-        android:layout_marginBottom="8dp"/>
-
-    <ListView
-        android:id="@+id/lv_weight_history"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:divider="#EEEEEE"
-        android:dividerHeight="1dp"
-        android:scrollbars="none"/>
 
 </LinearLayout>

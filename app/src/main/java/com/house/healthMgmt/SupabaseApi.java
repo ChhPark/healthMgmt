@@ -66,4 +66,25 @@ public interface SupabaseApi {
 
     @PATCH("/rest/v1/health_sodium")
     Call<Void> updateSodium(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
+	
+	@POST("/rest/v1/health_water")
+    Call<Void> insertWater(@Body WaterLog log);
+
+    @GET("/rest/v1/health_water?select=*&order=id.asc")
+    Call<List<WaterLog>> getTodayWaterLogs(@Query("record_date") String dateQuery);
+
+    @DELETE("/rest/v1/health_water")
+    Call<Void> deleteWater(@Query("id") String idQuery);
+
+    @PATCH("/rest/v1/health_water")
+    Call<Void> updateWater(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
+	
+	@GET("/rest/v1/health_water_type?select=*&order=id.asc")
+    Call<List<WaterType>> getWaterTypes();
+
+    @POST("/rest/v1/health_water_type")
+    Call<Void> insertWaterType(@Body WaterType type);
+
+    @DELETE("/rest/v1/health_water_type")
+    Call<Void> deleteWaterType(@Query("id") String idQuery);
 }

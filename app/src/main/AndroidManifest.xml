@@ -29,6 +29,15 @@
 		<activity android:name=".WeightActivity" />
 		
 		<activity android:name=".SodiumActivity" />
+		
+		<activity android:name=".WaterActivity" />
+		
+		<activity android:name=".WaterTargetActivity" />
+		
+		<activity android:name=".WaterTypeActivity" />
+
+
+
 
 
 
