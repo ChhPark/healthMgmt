@@ -83,9 +83,9 @@ public class SodiumActivity extends AppCompatActivity {
         });
         lvTodayRecords.setAdapter(adapter);
 
+        findViewById(R.id.btn_add_10).setOnClickListener(v -> addAmountToInput(10));
         findViewById(R.id.btn_add_100).setOnClickListener(v -> addAmountToInput(100));
         findViewById(R.id.btn_add_500).setOnClickListener(v -> addAmountToInput(500));
-        findViewById(R.id.btn_add_1000).setOnClickListener(v -> addAmountToInput(1000));
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
