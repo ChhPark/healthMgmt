@@ -53,6 +53,7 @@ public class SleepActivity extends AppCompatActivity {
     private String selectedType = "";
     private String currentUserId = "user_01";
     private Long editingLogId = null;
+	private String targetDate;
 
     private List<SleepType> sleepTypeList = new ArrayList<>();
     private ArrayAdapter<SleepType> spinnerAdapter;
@@ -61,6 +62,14 @@ public class SleepActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sleep);
+		
+		targetDate = getIntent().getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // [수정] 2. 헤더 텍스트 갱신 함수 호출
+        updateHeaderTitle();
 
         tvTotalSleep = findViewById(R.id.tv_total_sleep);
         tvGoal = findViewById(R.id.tv_goal); // [연결]
@@ -98,6 +107,43 @@ public class SleepActivity extends AppCompatActivity {
             startActivity(new Intent(SleepActivity.this, SleepTargetActivity.class));
         });
     }
+	
+	    // [추가] 액티비티 재사용 시 날짜 갱신
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        targetDate = intent.getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        updateHeaderTitle(); // 헤더 갱신
+        fetchTodayRecords(); // 데이터 다시 조회
+    }
+
+    // [추가] 헤더 텍스트 변경 로직 (오늘 vs yyyy년 mm월 dd일)
+    private void updateHeaderTitle() {
+        TextView tvHeader = findViewById(R.id.tv_record_header);
+        if (tvHeader != null) {
+            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+            if (targetDate.equals(todayStr)) {
+                tvHeader.setText("오늘의 기록");
+            } else {
+                try {
+                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+                    Date date = sdfInput.parse(targetDate);
+                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                } catch (Exception e) {
+                    tvHeader.setText(targetDate + "의 기록");
+                }
+            }
+        }
+    }
+
 
     @Override
     protected void onResume() {
@@ -216,8 +262,7 @@ public class SleepActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int minutes) {
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        SleepLog newLog = new SleepLog(today, selectedType, minutes, currentUserId);
+        SleepLog newLog = new SleepLog(targetDate, selectedType, minutes, currentUserId);
         
         apiService.insertSleep(newLog).enqueue(new Callback<Void>() {
             @Override
@@ -255,8 +300,8 @@ public class SleepActivity extends AppCompatActivity {
     }
 
     private void fetchTodayRecords() {
-        String today = "eq." + new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        apiService.getTodaySleepLogs(today).enqueue(new Callback<List<SleepLog>>() {
+        String query = "eq." + targetDate;
+        apiService.getTodaySleepLogs(query).enqueue(new Callback<List<SleepLog>>() {
             @Override
             public void onResponse(Call<List<SleepLog>> call, Response<List<SleepLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {

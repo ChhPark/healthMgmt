@@ -53,6 +53,7 @@ public class ExerciseActivity extends AppCompatActivity {
     private String selectedType = "";
     private String currentUserId = "user_01";
     private Long editingLogId = null;
+	private String targetDate;
 
     // 운동 종류 관리용 리스트
     private List<ExerciseType> exerciseTypeList = new ArrayList<>();
@@ -62,6 +63,14 @@ public class ExerciseActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_exercise);
+		
+		targetDate = getIntent().getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // [수정] 2. 헤더 텍스트 갱신 함수 호출
+        updateHeaderTitle();
 
         tvTotalExercise = findViewById(R.id.tv_total_exercise);
         tvGoal = findViewById(R.id.tv_goal);
@@ -99,6 +108,43 @@ public class ExerciseActivity extends AppCompatActivity {
             startActivity(new Intent(ExerciseActivity.this, ExerciseTargetActivity.class));
         });
     }
+	
+	    // [추가] 액티비티 재사용 시 날짜 갱신
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        targetDate = intent.getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        updateHeaderTitle(); // 헤더 갱신
+        fetchTodayRecords(); // 데이터 다시 조회
+    }
+
+    // [추가] 헤더 텍스트 변경 로직 (오늘 vs yyyy년 mm월 dd일)
+    private void updateHeaderTitle() {
+        TextView tvHeader = findViewById(R.id.tv_record_header);
+        if (tvHeader != null) {
+            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+            if (targetDate.equals(todayStr)) {
+                tvHeader.setText("오늘의 기록");
+            } else {
+                try {
+                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+                    Date date = sdfInput.parse(targetDate);
+                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                } catch (Exception e) {
+                    tvHeader.setText(targetDate + "의 기록");
+                }
+            }
+        }
+    }
+
 
     @Override
     protected void onResume() {
@@ -212,8 +258,7 @@ public class ExerciseActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int minutes) {
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        ExerciseLog newLog = new ExerciseLog(today, selectedType, minutes, currentUserId);
+       ExerciseLog newLog = new ExerciseLog(targetDate, selectedType, minutes, currentUserId);
         
         apiService.insertExercise(newLog).enqueue(new Callback<Void>() {
             @Override
@@ -251,8 +296,8 @@ public class ExerciseActivity extends AppCompatActivity {
     }
 
     private void fetchTodayRecords() {
-        String today = "eq." + new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        apiService.getTodayExerciseLogs(today).enqueue(new Callback<List<ExerciseLog>>() {
+        String query = "eq." + targetDate;
+        apiService.getTodayExerciseLogs(query).enqueue(new Callback<List<ExerciseLog>>() {
             @Override
             public void onResponse(Call<List<ExerciseLog>> call, Response<List<ExerciseLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {

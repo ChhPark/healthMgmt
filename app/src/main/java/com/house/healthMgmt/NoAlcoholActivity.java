@@ -51,6 +51,7 @@ public class NoAlcoholActivity extends AppCompatActivity {
     private String selectedAlcohol = "";
     private String currentUserId = "user_01";
     private Long editingLogId = null;
+	private String targetDate;
 
     // [수정] AlcoholType 사용
     private List<AlcoholType> alcoholTypeList = new ArrayList<>();
@@ -60,6 +61,14 @@ public class NoAlcoholActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_no_alcohol);
+		
+		targetDate = getIntent().getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // [수정] 2. 헤더 텍스트 갱신 함수 호출
+        updateHeaderTitle();
 
         tvTotalAlcohol = findViewById(R.id.tv_total_alcohol);
         etInput = findViewById(R.id.et_alcohol_input);
@@ -90,6 +99,43 @@ public class NoAlcoholActivity extends AppCompatActivity {
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
+	
+	    // [추가] 액티비티 재사용 시 날짜 갱신
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        targetDate = intent.getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        updateHeaderTitle(); // 헤더 갱신
+        fetchTodayRecords(); // 데이터 다시 조회
+    }
+
+    // [추가] 헤더 텍스트 변경 로직 (오늘 vs yyyy년 mm월 dd일)
+    private void updateHeaderTitle() {
+        TextView tvHeader = findViewById(R.id.tv_record_header);
+        if (tvHeader != null) {
+            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+            if (targetDate.equals(todayStr)) {
+                tvHeader.setText("오늘의 기록");
+            } else {
+                try {
+                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+                    Date date = sdfInput.parse(targetDate);
+                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                } catch (Exception e) {
+                    tvHeader.setText(targetDate + "의 기록");
+                }
+            }
+        }
+    }
+
 
     @Override
     protected void onResume() {
@@ -192,8 +238,7 @@ public class NoAlcoholActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        AlcoholLog newLog = new AlcoholLog(today, selectedAlcohol, amount, currentUserId);
+        AlcoholLog newLog = new AlcoholLog(targetDate, selectedAlcohol, amount, currentUserId);
         apiService.insertAlcohol(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -230,8 +275,8 @@ public class NoAlcoholActivity extends AppCompatActivity {
     }
 
     private void fetchTodayRecords() {
-        String today = "eq." + new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        apiService.getTodayAlcoholLogs(today).enqueue(new Callback<List<AlcoholLog>>() {
+        String query = "eq." + targetDate;
+        apiService.getTodayAlcoholLogs(query).enqueue(new Callback<List<AlcoholLog>>() {
             @Override
             public void onResponse(Call<List<AlcoholLog>> call, Response<List<AlcoholLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {

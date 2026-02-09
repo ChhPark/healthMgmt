@@ -1,5 +1,6 @@
 package com.house.healthMgmt;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -36,7 +37,7 @@ import retrofit2.Response;
 public class ProteinActivity extends AppCompatActivity {
 
     private TextView tvTotalProtein;
-    private TextView tvGoal; // [추가] 목표 표시 텍스트뷰
+    private TextView tvGoal;
     private EditText etInput;
     private Spinner spinnerFoodType;
     private ListView lvTodayRecords;
@@ -52,15 +53,26 @@ public class ProteinActivity extends AppCompatActivity {
 
     private List<FoodType> foodTypeList = new ArrayList<>();
     private ArrayAdapter<FoodType> spinnerAdapter;
+    
+    private String targetDate; 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_protein);
+        
+        // [수정 1] 가장 먼저 날짜를 받아와야 함 (순서 중요!)
+        targetDate = getIntent().getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // [수정 2] 헤더 텍스트 설정 (함수로 분리)
+        updateHeaderTitle();
 
         // 1. UI 연결
         tvTotalProtein = findViewById(R.id.tv_total_protein);
-        tvGoal = findViewById(R.id.tv_goal); // [중요] 목표 텍스트뷰 연결
+        tvGoal = findViewById(R.id.tv_goal);
         etInput = findViewById(R.id.et_protein_input);
         spinnerFoodType = findViewById(R.id.spinner_food_type);
         lvTodayRecords = findViewById(R.id.lv_today_records);
@@ -92,50 +104,76 @@ public class ProteinActivity extends AppCompatActivity {
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
 
-        // [추가] 목표 텍스트 클릭 시 체중 화면으로 이동
+        // 목표 텍스트 클릭 시 체중 화면으로 이동
         tvGoal.setOnClickListener(v -> {
             Intent intent = new Intent(ProteinActivity.this, WeightActivity.class);
             startActivity(intent);
         });
     }
 
+    // [수정 3] 액티비티가 재사용될 때 날짜와 헤더 모두 갱신
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent); 
+        
+        targetDate = intent.getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+        
+        // 날짜가 바뀌었으니 헤더와 데이터를 다시 불러옴
+        updateHeaderTitle();
+        fetchTodayRecords();
+    }
+
+    // [수정 4] 헤더 텍스트 설정 로직을 별도 함수로 분리 (재사용 위해)
+    private void updateHeaderTitle() {
+        TextView tvHeader = findViewById(R.id.tv_record_header);
+        if (tvHeader != null) {
+            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+            if (targetDate.equals(todayStr)) {
+                tvHeader.setText("오늘의 기록");
+            } else {
+                try {
+                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+                    Date date = sdfInput.parse(targetDate);
+                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                } catch (Exception e) {
+                    tvHeader.setText(targetDate + "의 기록");
+                }
+            }
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        // 화면이 다시 보일 때마다 데이터 갱신
         fetchFoodTypes();
         fetchTodayRecords();
-        updateGoalFromWeight(); // [핵심] 체중 기반 목표 업데이트
+        updateGoalFromWeight();
     }
 
-    // --- [기능: 체중 가져와서 목표 계산] ---
     private void updateGoalFromWeight() {
-        // 가장 최근 체중 1개를 가져옴
         apiService.getLatestWeight().enqueue(new Callback<List<WeightLog>>() {
             @Override
             public void onResponse(Call<List<WeightLog>> call, Response<List<WeightLog>> response) {
                 if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
-                    // 최신 체중 가져오기
                     double weight = response.body().get(0).getWeight();
-                    // 목표 계산 (체중 * 0.7) 반올림
                     int goal = (int) Math.round(weight * 0.7);
-                    
-                    // UI 업데이트
                     tvGoal.setText("목표: " + goal + "g (" + weight + "kg)");
                 } else {
                     tvGoal.setText("목표: 설정 필요 (클릭)");
                 }
             }
-
             @Override
             public void onFailure(Call<List<WeightLog>> call, Throwable t) {
-                // 에러 시 조용히 무시하거나 로그 출력
                 Log.e("ProteinActivity", "Weight fetch failed", t);
             }
         });
     }
-
-    // --- [기존 로직들 유지] ---
 
     private void setupSpinnerWithLongClick() {
         spinnerAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, foodTypeList);
@@ -211,8 +249,8 @@ public class ProteinActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        ProteinLog newLog = new ProteinLog(today, selectedFood, amount, currentUserId);
+        ProteinLog newLog = new ProteinLog(targetDate, selectedFood, amount, currentUserId);
+        
         apiService.insertProtein(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -247,8 +285,8 @@ public class ProteinActivity extends AppCompatActivity {
     }
 
     private void fetchTodayRecords() {
-        String today = "eq." + new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        apiService.getTodayLogs(today).enqueue(new Callback<List<ProteinLog>>() {
+        String queryDate = "eq." + targetDate;
+        apiService.getTodayLogs(queryDate).enqueue(new Callback<List<ProteinLog>>() {
             @Override
             public void onResponse(Call<List<ProteinLog>> call, Response<List<ProteinLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {

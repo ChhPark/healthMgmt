@@ -15,7 +15,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -56,10 +55,22 @@ public class SodiumActivity extends AppCompatActivity {
     private List<FoodType> foodTypeList = new ArrayList<>();
     private ArrayAdapter<FoodType> spinnerAdapter;
 
+    // [추가] 날짜 저장 변수
+    private String targetDate; 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sodium);
+
+        // [수정] 1. Intent에서 날짜 받기 (가장 먼저 실행)
+        targetDate = getIntent().getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // [수정] 2. 헤더 텍스트 업데이트 (오늘/날짜 구분)
+        updateHeaderTitle();
 
         tvTotalSodium = findViewById(R.id.tv_total_sodium);
         etInput = findViewById(R.id.et_sodium_input);
@@ -88,6 +99,43 @@ public class SodiumActivity extends AppCompatActivity {
         findViewById(R.id.btn_add_500).setOnClickListener(v -> addAmountToInput(500));
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
+    }
+
+    // [추가] 액티비티 재사용 시 날짜 및 데이터 갱신
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        
+        targetDate = intent.getStringExtra("target_date");
+        if (targetDate == null) {
+            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        }
+
+        // 날짜가 바뀌었으니 헤더와 목록 갱신
+        updateHeaderTitle();
+        fetchTodayRecords();
+    }
+
+    // [추가] 헤더 텍스트 설정 로직 (오늘의 기록 vs yyyy년 mm월 dd일의 기록)
+    private void updateHeaderTitle() {
+        TextView tvHeader = findViewById(R.id.tv_record_header);
+        if (tvHeader != null) {
+            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+
+            if (targetDate.equals(todayStr)) {
+                tvHeader.setText("오늘의 기록");
+            } else {
+                try {
+                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+                    Date date = sdfInput.parse(targetDate);
+                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                } catch (Exception e) {
+                    tvHeader.setText(targetDate + "의 기록");
+                }
+            }
+        }
     }
 
     @Override
@@ -146,7 +194,6 @@ public class SodiumActivity extends AppCompatActivity {
         if (inputStr.isEmpty()) return;
         
         try {
-            // [수정] 쉼표 제거 후 정수로 변환
             int amount = Integer.parseInt(inputStr.replace(",", ""));
             
             if (editingLogId == null) saveRecordToServer(amount);
@@ -158,7 +205,6 @@ public class SodiumActivity extends AppCompatActivity {
 
     private void loadRecordForEdit(SodiumLog log) {
         editingLogId = log.getId();
-        // [수정] 수정 시에도 쉼표 넣어서 보여주기
         etInput.setText(String.format("%,d", log.getSodiumAmount()));
         
         for (int i = 0; i < foodTypeList.size(); i++) {
@@ -178,8 +224,8 @@ public class SodiumActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        SodiumLog newLog = new SodiumLog(today, selectedFood, amount, currentUserId);
+        // [수정] targetDate 사용
+        SodiumLog newLog = new SodiumLog(targetDate, selectedFood, amount, currentUserId);
         apiService.insertSodium(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -216,8 +262,9 @@ public class SodiumActivity extends AppCompatActivity {
     }
 
     private void fetchTodayRecords() {
-        String today = "eq." + new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        apiService.getTodaySodiumLogs(today).enqueue(new Callback<List<SodiumLog>>() {
+        // [수정] targetDate 사용
+        String query = "eq." + targetDate;
+        apiService.getTodaySodiumLogs(query).enqueue(new Callback<List<SodiumLog>>() {
             @Override
             public void onResponse(Call<List<SodiumLog>> call, Response<List<SodiumLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -227,7 +274,6 @@ public class SodiumActivity extends AppCompatActivity {
                         totalSum += log.getSodiumAmount();
                         logDataList.add(log);
                     }
-                    // [수정] 총 섭취량 쉼표 추가
                     tvTotalSodium.setText(String.format("%,d", totalSum));
                     adapter.notifyDataSetChanged();
                 }
@@ -263,7 +309,6 @@ public class SodiumActivity extends AppCompatActivity {
 
     private void addAmountToInput(int amount) {
         String currentText = etInput.getText().toString();
-        // 쉼표 제거
         currentText = currentText.replace(",", "");
         
         int currentVal = 0;
@@ -273,7 +318,6 @@ public class SodiumActivity extends AppCompatActivity {
             }
         } catch (Exception e) {}
         
-        // 더한 후 다시 쉼표 포맷팅
         int newVal = currentVal + amount;
         etInput.setText(String.format("%,d", newVal));
     }
@@ -314,7 +358,6 @@ public class SodiumActivity extends AppCompatActivity {
             if (colorBar != null) colorBar.setBackgroundColor(orangeColor);
             
             if (tvAmount != null) {
-                // [수정] 리스트 아이템 숫자에도 쉼표 추가
                 tvAmount.setText(String.format("%,d", log.getSodiumAmount()));
                 tvAmount.setTextColor(orangeColor);
             }

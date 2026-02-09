@@ -1,13 +1,16 @@
 package com.house.healthMgmt;
 
+import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -17,17 +20,21 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    // ... (기존 TextView 변수들 동일) ...
     private TextView tvDateTitle;
-    private TextView tvProteinValue;     // 단백질 O/X
-    private TextView tvSodiumValue;      // 나트륨 O/X
-    private TextView tvWaterValue;       // 물 O/X
-    private TextView tvNoBeverageValue;  // No음료수 O/X
-    private TextView tvNoAlcoholValue;   // No술 O/X
-    private TextView tvSleepValue;       // 수면 O/X
-    private TextView tvExerciseValue;    // 운동 O/X (추가됨)
+    private TextView tvProteinValue;
+    private TextView tvSodiumValue;
+    private TextView tvWaterValue;
+    private TextView tvNoBeverageValue;
+    private TextView tvNoAlcoholValue;
+    private TextView tvSleepValue;
+    private TextView tvExerciseValue;
     
     private SupabaseApi apiService;
-    private String todayDate;
+    
+    // [수정] 날짜 관련 변수 통합 관리
+    private String todayDate; // API 쿼리에 사용되는 날짜 문자열 (yyyy-MM-dd)
+    private Calendar currentCalendar = Calendar.getInstance();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,73 +49,122 @@ public class MainActivity extends AppCompatActivity {
         tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
         tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
         tvSleepValue = findViewById(R.id.tv_sleep_value);
-        tvExerciseValue = findViewById(R.id.tv_exercise_value); // XML ID 필요
+        tvExerciseValue = findViewById(R.id.tv_exercise_value);
 
         apiService = SupabaseClient.getApi(this);
 
-        // 오늘 날짜 구하기 (yyyy-MM-dd)
-        todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        // 2. 초기 날짜 설정 (오늘 날짜로 초기화 및 UI 표시)
+        updateDateDisplay(); 
 
-        // 2. 헤더 날짜 업데이트
-        updateDateHeader();
-
-        // 3. 클릭 리스너 설정 (화면 이동)
-        
-        // [단백질]
-        findViewById(R.id.card_protein).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, ProteinActivity.class));
+        // 3. 날짜 롱클릭 리스너 (달력 띄우기)
+        tvDateTitle.setOnLongClickListener(v -> {
+            showDatePicker();
+            return true;
         });
 
-        // [나트륨]
-        findViewById(R.id.card_sodium).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, SodiumActivity.class));
-        });
-
-        // [물]
-        findViewById(R.id.card_water).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, WaterActivity.class));
-        });
-
-        // [No음료수]
-        findViewById(R.id.card_no_beverage).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, NoBeverageActivity.class));
-        });
-
-        // [No술]
-        findViewById(R.id.card_no_alcohol).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, NoAlcoholActivity.class));
-        });
-
-        // [수면]
-        findViewById(R.id.card_sleep).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, SleepActivity.class));
-        });
-
-        // [운동] (추가됨)
-        findViewById(R.id.card_exercise).setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, ExerciseActivity.class));
-        });
+        // 4. 카드 클릭 리스너 설정 (화면 이동 + 날짜 전달)
+        // [중요] 중복 정의를 제거하고 아래와 같이 통합했습니다.
+        setupCardListeners();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // 화면이 다시 보일 때마다 모든 데이터 갱신
+        // 화면이 다시 보일 때마다 현재 설정된 날짜(todayDate) 기준으로 데이터 갱신
+        refreshAllGoals();
+    }
+
+    // [수정] 카드 클릭 리스너 통합 메서드
+    private void setupCardListeners() {
+        // 단백질
+        findViewById(R.id.card_protein).setOnClickListener(v -> navigateTo(ProteinActivity.class));
+        
+        // 나트륨
+        findViewById(R.id.card_sodium).setOnClickListener(v -> navigateTo(SodiumActivity.class));
+        
+        // 물
+        findViewById(R.id.card_water).setOnClickListener(v -> navigateTo(WaterActivity.class));
+        
+        // No음료수
+        findViewById(R.id.card_no_beverage).setOnClickListener(v -> navigateTo(NoBeverageActivity.class));
+        
+        // No술
+        findViewById(R.id.card_no_alcohol).setOnClickListener(v -> navigateTo(NoAlcoholActivity.class));
+        
+        // 수면
+        findViewById(R.id.card_sleep).setOnClickListener(v -> navigateTo(SleepActivity.class));
+        
+        // 운동
+        findViewById(R.id.card_exercise).setOnClickListener(v -> navigateTo(ExerciseActivity.class));
+    }
+
+    // [추가] 화면 이동 공통 메서드 (날짜 전달 포함)
+    private void navigateTo(Class<?> targetActivity) {
+        Intent intent = new Intent(MainActivity.this, targetActivity);
+        // ★ 핵심: 현재 선택된 날짜(todayDate)를 넘겨줌
+        intent.putExtra("target_date", todayDate); 
+        startActivity(intent);
+    }
+
+    // [수정] 달력 다이얼로그 표시
+    private void showDatePicker() {
+        DatePickerDialog datePickerDialog = new DatePickerDialog(
+            this,
+            (view, year, month, dayOfMonth) -> {
+                // 선택한 날짜로 Calendar 객체 갱신
+                currentCalendar.set(year, month, dayOfMonth);
+                
+                // UI 업데이트 및 날짜 변수 갱신
+                updateDateDisplay();
+                
+                // 변경된 날짜로 대시보드 O/X 데이터 다시 조회
+                refreshAllGoals();
+            },
+            currentCalendar.get(Calendar.YEAR),
+            currentCalendar.get(Calendar.MONTH),
+            currentCalendar.get(Calendar.DAY_OF_MONTH)
+        );
+        datePickerDialog.show();
+    }
+
+    // [수정] 날짜 UI 표시 및 변수 동기화 로직
+    private void updateDateDisplay() {
+        // 1. 보여줄 형식 (예: 2026년 02월 09일)
+        SimpleDateFormat sdfDisplay = new SimpleDateFormat("yyyy년 MM월 dd일 EEEE", Locale.KOREA);
+        tvDateTitle.setText(sdfDisplay.format(currentCalendar.getTime()));
+
+        // 2. 서버 전송용 형식 (yyyy-MM-dd) 업데이트
+        SimpleDateFormat sdfQuery = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+        String selectedDateStr = sdfQuery.format(currentCalendar.getTime());
+        
+        // [중요] API 쿼리에 쓰이는 변수(todayDate)를 선택된 날짜로 업데이트
+        this.todayDate = selectedDateStr;
+
+        // 3. 오늘 날짜와 비교하여 색상 변경
+        String realTodayStr = sdfQuery.format(new Date());
+        if (selectedDateStr.equals(realTodayStr)) {
+            tvDateTitle.setTextColor(Color.parseColor("#333333")); // 오늘이면 검정
+        } else {
+            tvDateTitle.setTextColor(Color.RED); // 오늘이 아니면 빨강
+        }
+    }
+
+    // --- [데이터 갱신 메서드 모음] ---
+    private void refreshAllGoals() {
         checkProteinGoal();
         checkSodiumGoal();
         checkWaterGoal();
         checkBeverageGoal();
         checkAlcoholGoal();
         checkSleepGoal(); 
-        checkExerciseGoal(); // 운동 체크 추가
+        checkExerciseGoal();
     }
 
-    private void updateDateHeader() {
-        String displayDate = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA).format(new Date());
-        tvDateTitle.setText(displayDate);
-    }
+    // --- [아래 check...Goal 메서드들은 기존 소스 그대로 유지] ---
+    // todayDate 변수가 updateDateDisplay()에 의해 변경되었으므로, 
+    // 아래 메서드들은 자동으로 선택된 날짜의 데이터를 조회하게 됩니다.
 
-    // --- [1. 단백질 목표 달성 체크 (체중 * 0.7)] ---
+    // 1. 단백질
     private void checkProteinGoal() {
         apiService.getLatestWeight().enqueue(new Callback<List<WeightLog>>() {
             @Override
@@ -129,7 +185,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void calculateProteinStatus(double weight) {
         int goalLimit = (int) Math.round(weight * 0.7);
-        String dateQuery = "eq." + todayDate;
+        // todayDate는 이제 선택된 날짜입니다.
+        String dateQuery = "eq." + todayDate; 
 
         apiService.getTodayLogs(dateQuery).enqueue(new Callback<List<ProteinLog>>() {
             @Override
@@ -139,7 +196,6 @@ public class MainActivity extends AppCompatActivity {
                     for (ProteinLog log : response.body()) {
                         totalProtein += log.getProteinAmount();
                     }
-                    // 목표 '이하'면 성공
                     boolean isSuccess = totalProtein <= goalLimit; 
                     tvProteinValue.setText(isSuccess ? "O" : "X");
                 }
@@ -149,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [2. 나트륨 목표 달성 체크 (2,000mg 이하)] ---
+    // 2. 나트륨
     private void checkSodiumGoal() {
         int sodiumGoal = 2000;
         String dateQuery = "eq." + todayDate;
@@ -162,7 +218,6 @@ public class MainActivity extends AppCompatActivity {
                     for (SodiumLog log : response.body()) {
                         totalSodium += log.getSodiumAmount();
                     }
-                    // 2000mg '이하'면 성공
                     boolean isSuccess = totalSodium <= sodiumGoal;
                     tvSodiumValue.setText(isSuccess ? "O" : "X");
                 }
@@ -172,10 +227,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [3. 물 목표 달성 체크 (설정값 이상)] ---
+    // 3. 물
     private void checkWaterGoal() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int waterGoal = prefs.getInt("water_target", 2000); // 기본값 2000
+        int waterGoal = prefs.getInt("water_target", 2000);
         String dateQuery = "eq." + todayDate;
 
         apiService.getTodayWaterLogs(dateQuery).enqueue(new Callback<List<WaterLog>>() {
@@ -186,7 +241,6 @@ public class MainActivity extends AppCompatActivity {
                     for (WaterLog log : response.body()) {
                         totalWater += log.getWaterAmount();
                     }
-                    // 목표량 '이상'이면 성공
                     boolean isSuccess = totalWater >= waterGoal;
                     tvWaterValue.setText(isSuccess ? "O" : "X");
                 }
@@ -196,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [4. No음료수 목표 달성 체크 (0cc 유지)] ---
+    // 4. No음료수
     private void checkBeverageGoal() {
         String dateQuery = "eq." + todayDate;
         apiService.getTodayBeverageLogs(dateQuery).enqueue(new Callback<List<BeverageLog>>() {
@@ -218,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [5. No술 목표 달성 체크 (0cc 유지)] ---
+    // 5. No술
     private void checkAlcoholGoal() {
         String dateQuery = "eq." + todayDate;
         apiService.getTodayAlcoholLogs(dateQuery).enqueue(new Callback<List<AlcoholLog>>() {
@@ -238,12 +292,12 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [6. 수면 목표 달성 체크 (설정값 이상)] ---
+    // 6. 수면
     private void checkSleepGoal() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int sleepGoal = prefs.getInt("sleep_target", 420); // 기본값 420
-
+        int sleepGoal = prefs.getInt("sleep_target", 420);
         String dateQuery = "eq." + todayDate;
+
         apiService.getTodaySleepLogs(dateQuery).enqueue(new Callback<List<SleepLog>>() {
             @Override
             public void onResponse(Call<List<SleepLog>> call, Response<List<SleepLog>> response) {
@@ -252,7 +306,6 @@ public class MainActivity extends AppCompatActivity {
                     for (SleepLog log : response.body()) {
                         totalMinutes += log.getMinutes();
                     }
-                    // 목표 시간 '이상'이면 성공
                     boolean isSuccess = totalMinutes >= sleepGoal;
                     tvSleepValue.setText(isSuccess ? "O" : "X");
                 }
@@ -262,12 +315,12 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // --- [7. 운동 목표 달성 체크 (설정값 이상)] ---
+    // 7. 운동
     private void checkExerciseGoal() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int exerciseGoal = prefs.getInt("exercise_target", 30); // 기본값 30분
-
+        int exerciseGoal = prefs.getInt("exercise_target", 30);
         String dateQuery = "eq." + todayDate;
+
         apiService.getTodayExerciseLogs(dateQuery).enqueue(new Callback<List<ExerciseLog>>() {
             @Override
             public void onResponse(Call<List<ExerciseLog>> call, Response<List<ExerciseLog>> response) {
@@ -276,7 +329,6 @@ public class MainActivity extends AppCompatActivity {
                     for (ExerciseLog log : response.body()) {
                         totalMinutes += log.getMinutes();
                     }
-                    // 목표 시간 '이상'이면 성공
                     boolean isSuccess = totalMinutes >= exerciseGoal;
                     tvExerciseValue.setText(isSuccess ? "O" : "X");
                 }
