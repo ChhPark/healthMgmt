@@ -24,6 +24,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvNoBeverageValue;  // No음료수 O/X
     private TextView tvNoAlcoholValue;   // No술 O/X
     private TextView tvSleepValue;       // 수면 O/X
+    private TextView tvExerciseValue;    // 운동 O/X (추가됨)
     
     private SupabaseApi apiService;
     private String todayDate;
@@ -41,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
         tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
         tvSleepValue = findViewById(R.id.tv_sleep_value);
+        tvExerciseValue = findViewById(R.id.tv_exercise_value); // XML ID 필요
 
         apiService = SupabaseClient.getApi(this);
 
@@ -81,6 +83,11 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.card_sleep).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, SleepActivity.class));
         });
+
+        // [운동] (추가됨)
+        findViewById(R.id.card_exercise).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, ExerciseActivity.class));
+        });
     }
 
     @Override
@@ -93,6 +100,7 @@ public class MainActivity extends AppCompatActivity {
         checkBeverageGoal();
         checkAlcoholGoal();
         checkSleepGoal(); 
+        checkExerciseGoal(); // 운동 체크 추가
     }
 
     private void updateDateHeader() {
@@ -232,12 +240,10 @@ public class MainActivity extends AppCompatActivity {
 
     // --- [6. 수면 목표 달성 체크 (설정값 이상)] ---
     private void checkSleepGoal() {
-        // [수정] 저장된 목표값 가져오기 (기본값 420)
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int sleepGoal = prefs.getInt("sleep_target", 420); 
+        int sleepGoal = prefs.getInt("sleep_target", 420); // 기본값 420
 
         String dateQuery = "eq." + todayDate;
-
         apiService.getTodaySleepLogs(dateQuery).enqueue(new Callback<List<SleepLog>>() {
             @Override
             public void onResponse(Call<List<SleepLog>> call, Response<List<SleepLog>> response) {
@@ -253,6 +259,30 @@ public class MainActivity extends AppCompatActivity {
             }
             @Override
             public void onFailure(Call<List<SleepLog>> call, Throwable t) {}
+        });
+    }
+
+    // --- [7. 운동 목표 달성 체크 (설정값 이상)] ---
+    private void checkExerciseGoal() {
+        SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
+        int exerciseGoal = prefs.getInt("exercise_target", 30); // 기본값 30분
+
+        String dateQuery = "eq." + todayDate;
+        apiService.getTodayExerciseLogs(dateQuery).enqueue(new Callback<List<ExerciseLog>>() {
+            @Override
+            public void onResponse(Call<List<ExerciseLog>> call, Response<List<ExerciseLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalMinutes = 0;
+                    for (ExerciseLog log : response.body()) {
+                        totalMinutes += log.getMinutes();
+                    }
+                    // 목표 시간 '이상'이면 성공
+                    boolean isSuccess = totalMinutes >= exerciseGoal;
+                    tvExerciseValue.setText(isSuccess ? "O" : "X");
+                }
+            }
+            @Override
+            public void onFailure(Call<List<ExerciseLog>> call, Throwable t) {}
         });
     }
 }

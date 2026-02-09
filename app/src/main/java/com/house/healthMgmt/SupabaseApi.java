@@ -143,4 +143,26 @@ public interface SupabaseApi {
 
     @DELETE("/rest/v1/health_sleep_type")
     Call<Void> deleteSleepType(@Query("id") String idQuery);
+	
+	@POST("/rest/v1/health_exercise")
+    Call<Void> insertExercise(@Body ExerciseLog log);
+
+    @GET("/rest/v1/health_exercise?select=*&order=id.asc")
+    Call<List<ExerciseLog>> getTodayExerciseLogs(@Query("record_date") String dateQuery);
+
+    @DELETE("/rest/v1/health_exercise")
+    Call<Void> deleteExercise(@Query("id") String idQuery);
+
+    @PATCH("/rest/v1/health_exercise")
+    Call<Void> updateExercise(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
+
+    // 운동 종류 API
+    @GET("/rest/v1/health_exercise_type?select=*&order=id.asc")
+    Call<List<ExerciseType>> getExerciseTypes();
+	
+	@POST("/rest/v1/health_exercise_type")
+    Call<Void> insertExerciseType(@Body ExerciseType type);
+
+    @DELETE("/rest/v1/health_exercise_type")
+    Call<Void> deleteExerciseType(@Query("id") String idQuery);
 }

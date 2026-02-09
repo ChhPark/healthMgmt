@@ -49,6 +49,15 @@
 		<activity android:name=".SleepTypeActivity" />
 		
 		<activity android:name=".SleepTargetActivity" />
+		
+		<activity android:name=".ExerciseActivity" />
+		
+		<activity android:name=".ExerciseTypeActivity" />
+		
+		<activity android:name=".ExerciseTargetActivity" />
+
+
+
 
 
 
