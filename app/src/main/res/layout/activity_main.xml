@@ -235,6 +235,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_sleep"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_columnWeight="1"
@@ -250,6 +251,7 @@
                     android:padding="24dp">
 
                     <TextView
+                        android:id="@+id/tv_sleep_value"
                         android:layout_width="80dp"
                         android:layout_height="80dp"
                         android:background="@drawable/bg_circle"

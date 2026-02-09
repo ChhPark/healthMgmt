@@ -122,4 +122,25 @@ public interface SupabaseApi {
 
     @DELETE("/rest/v1/health_alcohol_type")
     Call<Void> deleteAlcoholType(@Query("id") String idQuery);
+	
+	@POST("/rest/v1/health_sleep")
+    Call<Void> insertSleep(@Body SleepLog log);
+
+    @GET("/rest/v1/health_sleep?select=*&order=id.asc")
+    Call<List<SleepLog>> getTodaySleepLogs(@Query("record_date") String dateQuery);
+
+    @DELETE("/rest/v1/health_sleep")
+    Call<Void> deleteSleep(@Query("id") String idQuery);
+
+    @PATCH("/rest/v1/health_sleep")
+    Call<Void> updateSleep(@Query("id") String idQuery, @Body Map<String, Object> updateFields);
+	
+	@GET("/rest/v1/health_sleep_type?select=*&order=id.asc")
+    Call<List<SleepType>> getSleepTypes();
+
+    @POST("/rest/v1/health_sleep_type")
+    Call<Void> insertSleepType(@Body SleepType type);
+
+    @DELETE("/rest/v1/health_sleep_type")
+    Call<Void> deleteSleepType(@Query("id") String idQuery);
 }

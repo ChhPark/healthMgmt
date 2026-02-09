@@ -22,7 +22,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvSodiumValue;      // 나트륨 O/X
     private TextView tvWaterValue;       // 물 O/X
     private TextView tvNoBeverageValue;  // No음료수 O/X
-    private TextView tvNoAlcoholValue;   // No술 O/X (추가됨)
+    private TextView tvNoAlcoholValue;   // No술 O/X
+    private TextView tvSleepValue;       // 수면 O/X
     
     private SupabaseApi apiService;
     private String todayDate;
@@ -38,7 +39,8 @@ public class MainActivity extends AppCompatActivity {
         tvSodiumValue = findViewById(R.id.tv_sodium_value);
         tvWaterValue = findViewById(R.id.tv_water_value);
         tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
-        tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value); // XML ID 필요
+        tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
+        tvSleepValue = findViewById(R.id.tv_sleep_value);
 
         apiService = SupabaseClient.getApi(this);
 
@@ -70,9 +72,14 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(MainActivity.this, NoBeverageActivity.class));
         });
 
-        // [No술] (추가됨)
+        // [No술]
         findViewById(R.id.card_no_alcohol).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, NoAlcoholActivity.class));
+        });
+
+        // [수면]
+        findViewById(R.id.card_sleep).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, SleepActivity.class));
         });
     }
 
@@ -84,7 +91,8 @@ public class MainActivity extends AppCompatActivity {
         checkSodiumGoal();
         checkWaterGoal();
         checkBeverageGoal();
-        checkAlcoholGoal(); // 술 체크 추가
+        checkAlcoholGoal();
+        checkSleepGoal(); 
     }
 
     private void updateDateHeader() {
@@ -189,7 +197,6 @@ public class MainActivity extends AppCompatActivity {
                 if (response.isSuccessful() && response.body() != null) {
                     int totalBeverage = 0;
                     for (BeverageLog log : response.body()) {
-                        // 디카페인 커피는 합산 제외 (상세 화면 로직과 동일하게 적용)
                         if (!"디카페인 커피".equals(log.getBeverageType())) {
                             totalBeverage += log.getAmount();
                         }
@@ -214,13 +221,38 @@ public class MainActivity extends AppCompatActivity {
                     for (AlcoholLog log : response.body()) {
                         totalAlcohol += log.getAmount();
                     }
-                    // 하나도 안 마셨으면(0) 성공(O)
                     boolean isSuccess = totalAlcohol == 0;
                     tvNoAlcoholValue.setText(isSuccess ? "O" : "X");
                 }
             }
             @Override
             public void onFailure(Call<List<AlcoholLog>> call, Throwable t) {}
+        });
+    }
+
+    // --- [6. 수면 목표 달성 체크 (설정값 이상)] ---
+    private void checkSleepGoal() {
+        // [수정] 저장된 목표값 가져오기 (기본값 420)
+        SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
+        int sleepGoal = prefs.getInt("sleep_target", 420); 
+
+        String dateQuery = "eq." + todayDate;
+
+        apiService.getTodaySleepLogs(dateQuery).enqueue(new Callback<List<SleepLog>>() {
+            @Override
+            public void onResponse(Call<List<SleepLog>> call, Response<List<SleepLog>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    int totalMinutes = 0;
+                    for (SleepLog log : response.body()) {
+                        totalMinutes += log.getMinutes();
+                    }
+                    // 목표 시간 '이상'이면 성공
+                    boolean isSuccess = totalMinutes >= sleepGoal;
+                    tvSleepValue.setText(isSuccess ? "O" : "X");
+                }
+            }
+            @Override
+            public void onFailure(Call<List<SleepLog>> call, Throwable t) {}
         });
     }
 }

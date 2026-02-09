@@ -43,6 +43,15 @@
 		<activity android:name=".NoAlcoholActivity" />
 		
 		<activity android:name=".AlcoholTypeActivity" />
+		
+		<activity android:name=".SleepActivity" />
+		
+		<activity android:name=".SleepTypeActivity" />
+		
+		<activity android:name=".SleepTargetActivity" />
+
+
+
 
 
 
