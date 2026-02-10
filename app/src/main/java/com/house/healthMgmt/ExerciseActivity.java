@@ -37,7 +37,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class ExerciseActivity extends AppCompatActivity {
+public class ExerciseActivity extends BaseHealthActivity {
 
     private TextView tvTotalExercise;
     private TextView tvGoal;
@@ -51,7 +51,6 @@ public class ExerciseActivity extends AppCompatActivity {
     private ExerciseAdapter adapter;
 
     private String selectedType = "";
-    private String currentUserId = "user_01";
     private Long editingLogId = null;
 	private String targetDate;
 
@@ -64,7 +63,9 @@ public class ExerciseActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_exercise);
 		
-		targetDate = getIntent().getStringExtra("target_date");
+		initializeUserId(); // ✅ 추가
+		
+		targetDate = getTargetDateFromIntent(); // ("target_date");
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
@@ -103,11 +104,31 @@ public class ExerciseActivity extends AppCompatActivity {
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
 
-        // [수정] 운동 목표 설정 화면으로 이동
-        tvGoal.setOnClickListener(v -> {
-            startActivity(new Intent(ExerciseActivity.this, ExerciseTargetActivity.class));
-        });
+        setupGoalClickListeners();
     }
+	
+	private void setupGoalClickListeners() {
+    // ✅ 클릭 효과 활성화
+    tvGoal.setClickable(true);
+    tvGoal.setFocusable(true);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+            new int[]{android.R.attr.selectableItemBackground});
+        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+        ta.recycle();
+    }
+    
+    tvGoal.setOnClickListener(v -> {
+        Toast.makeText(this, 
+            "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
+            Toast.LENGTH_SHORT).show();
+    });
+    
+    tvGoal.setOnLongClickListener(v -> {
+        startActivity(new Intent(ExerciseActivity.this, ExerciseTargetActivity.class));
+        return true;
+    });
+}
 	
 	    // [추가] 액티비티 재사용 시 날짜 갱신
     @Override
@@ -159,7 +180,7 @@ public class ExerciseActivity extends AppCompatActivity {
         int targetMinutes = prefs.getInt("exercise_target", 30); // 기본값 30분
         
         // 예: "목표: 30분 이상"
-        String text = String.format(Locale.KOREA, "목표: %d분 이상", targetMinutes);
+        String text = String.format(Locale.KOREA, "목표: %d분 이상 ⓘ", targetMinutes);
         tvGoal.setText(text);
     }
 
@@ -193,6 +214,9 @@ public class ExerciseActivity extends AppCompatActivity {
     }
 
     private void fetchExerciseTypes() {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         apiService.getExerciseTypes().enqueue(new Callback<List<ExerciseType>>() {
             @Override
             public void onResponse(Call<List<ExerciseType>> call, Response<List<ExerciseType>> response) {
@@ -258,20 +282,23 @@ public class ExerciseActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int minutes) {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
        ExerciseLog newLog = new ExerciseLog(targetDate, selectedType, minutes, currentUserId);
         
         apiService.insertExercise(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(ExerciseActivity.this, "저장됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(ExerciseActivity.this, "저장 실패", Toast.LENGTH_SHORT).show();
+                showError("저장 실패");
             }
         });
     }
@@ -285,7 +312,7 @@ public class ExerciseActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(ExerciseActivity.this, "수정됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
                 }

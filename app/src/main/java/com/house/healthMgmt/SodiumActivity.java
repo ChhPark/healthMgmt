@@ -36,7 +36,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class SodiumActivity extends AppCompatActivity {
+public class SodiumActivity extends BaseHealthActivity {
 
     private TextView tvTotalSodium;
     private EditText etInput;
@@ -49,7 +49,6 @@ public class SodiumActivity extends AppCompatActivity {
     private SodiumAdapter adapter; 
 
     private String selectedFood = "";
-    private String currentUserId = "user_01";
     private Long editingLogId = null;
 
     private List<FoodType> foodTypeList = new ArrayList<>();
@@ -62,9 +61,11 @@ public class SodiumActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sodium);
+		
+		initializeUserId(); // ✅ 추가
 
         // [수정] 1. Intent에서 날짜 받기 (가장 먼저 실행)
-        targetDate = getIntent().getStringExtra("target_date");
+        targetDate = getTargetDateFromIntent(); // ("target_date");
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
@@ -174,6 +175,9 @@ public class SodiumActivity extends AppCompatActivity {
     }
 
     private void fetchFoodTypes() {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         apiService.getFoodTypes().enqueue(new Callback<List<FoodType>>() {
             @Override
             public void onResponse(Call<List<FoodType>> call, Response<List<FoodType>> response) {
@@ -224,20 +228,23 @@ public class SodiumActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         // [수정] targetDate 사용
         SodiumLog newLog = new SodiumLog(targetDate, selectedFood, amount, currentUserId);
         apiService.insertSodium(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(SodiumActivity.this, "저장됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(SodiumActivity.this, "저장 실패", Toast.LENGTH_SHORT).show();
+                showError("저장 실패");
             }
         });
     }
@@ -251,7 +258,7 @@ public class SodiumActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(SodiumActivity.this, "수정됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
                 }

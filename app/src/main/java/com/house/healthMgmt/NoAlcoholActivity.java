@@ -36,7 +36,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class NoAlcoholActivity extends AppCompatActivity {
+public class NoAlcoholActivity extends BaseHealthActivity {
 
     private TextView tvTotalAlcohol;
     private EditText etInput;
@@ -49,7 +49,6 @@ public class NoAlcoholActivity extends AppCompatActivity {
     private AlcoholAdapter adapter;
 
     private String selectedAlcohol = "";
-    private String currentUserId = "user_01";
     private Long editingLogId = null;
 	private String targetDate;
 
@@ -62,7 +61,9 @@ public class NoAlcoholActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_no_alcohol);
 		
-		targetDate = getIntent().getStringExtra("target_date");
+		initializeUserId(); // ✅ 추가
+		
+		targetDate = getTargetDateFromIntent(); // ("target_date");
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
@@ -174,6 +175,9 @@ public class NoAlcoholActivity extends AppCompatActivity {
     }
 
     private void fetchAlcoholTypes() {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         apiService.getAlcoholTypes().enqueue(new Callback<List<AlcoholType>>() {
             @Override
             public void onResponse(Call<List<AlcoholType>> call, Response<List<AlcoholType>> response) {
@@ -238,19 +242,22 @@ public class NoAlcoholActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         AlcoholLog newLog = new AlcoholLog(targetDate, selectedAlcohol, amount, currentUserId);
         apiService.insertAlcohol(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(NoAlcoholActivity.this, "저장됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(NoAlcoholActivity.this, "저장 실패", Toast.LENGTH_SHORT).show();
+                showError("저장 실패");
             }
         });
     }
@@ -264,7 +271,7 @@ public class NoAlcoholActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(NoAlcoholActivity.this, "수정됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
                 }

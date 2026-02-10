@@ -23,7 +23,6 @@ public class FoodActivity extends AppCompatActivity {
     private ListView lvFoodList;
     private SupabaseApi apiService;
     
-    // 커스텀 어댑터 사용
     private FoodAdapter adapter;
     private List<FoodType> foodList = new ArrayList<>();
 
@@ -36,33 +35,35 @@ public class FoodActivity extends AppCompatActivity {
         lvFoodList = findViewById(R.id.lv_food_list);
         apiService = SupabaseClient.getApi(this);
 
-        // 어댑터 연결 (삭제 버튼 클릭 리스너 포함)
         adapter = new FoodAdapter(this, foodList, new FoodAdapter.OnDeleteListener() {
             @Override
             public void onDelete(FoodType food) {
-                showDeleteConfirmDialog(food); // 커스텀 팝업 호출
+                showDeleteConfirmDialog(food);
             }
         });
         lvFoodList.setAdapter(adapter);
 
-        // 추가 버튼
         findViewById(R.id.btn_add_food).setOnClickListener(v -> addFood());
 
-        // 초기 데이터 로드
         loadFoodList();
     }
 
-    // --- [기능: 삭제 팝업 (Material Style)] ---
+    private void showError(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showSuccess(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
     private void showDeleteConfirmDialog(FoodType food) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         
-        // 단백질 화면과 동일한 레이아웃 파일 재사용
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_delete_confirm, null);
         builder.setView(view);
 
         final AlertDialog dialog = builder.create();
 
-        // 배경 투명 처리 (둥근 모서리 적용 필수)
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
@@ -71,7 +72,6 @@ public class FoodActivity extends AppCompatActivity {
         Button btnCancel = view.findViewById(R.id.btn_cancel);
         Button btnDelete = view.findViewById(R.id.btn_delete);
 
-        // 메시지 설정
         tvMessage.setText("'" + food.getName() + "' 항목을\n삭제하시겠습니까?");
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
@@ -91,32 +91,40 @@ public class FoodActivity extends AppCompatActivity {
                     foodList.clear();
                     foodList.addAll(response.body());
                     adapter.notifyDataSetChanged();
+                } else {
+                    showError("목록을 불러올 수 없습니다.");
                 }
             }
             @Override
             public void onFailure(Call<List<FoodType>> call, Throwable t) {
-                Toast.makeText(FoodActivity.this, "목록 로드 실패", Toast.LENGTH_SHORT).show();
+                android.util.Log.e("FoodActivity", "API Error", t);
+                showError("목록 로드 중 오류가 발생했습니다.");
             }
         });
     }
 
     private void addFood() {
         String name = etFoodName.getText().toString().trim();
-        if (name.isEmpty()) return;
+        if (name.isEmpty()) {
+            showError("음식 이름을 입력하세요.");
+            return;
+        }
 
         apiService.insertFoodType(new FoodType(name)).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
+                    showSuccess("추가되었습니다.");
                     etFoodName.setText("");
                     loadFoodList();
                 } else {
-                    Toast.makeText(FoodActivity.this, "추가 실패", Toast.LENGTH_SHORT).show();
+                    showError("추가 실패");
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(FoodActivity.this, "오류 발생", Toast.LENGTH_SHORT).show();
+                android.util.Log.e("FoodActivity", "API Error", t);
+                showError("추가 중 오류가 발생했습니다.");
             }
         });
     }
@@ -126,15 +134,16 @@ public class FoodActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(FoodActivity.this, "삭제되었습니다.", Toast.LENGTH_SHORT).show();
+                    showSuccess("삭제되었습니다.");
                     loadFoodList();
                 } else {
-                    Toast.makeText(FoodActivity.this, "삭제 실패", Toast.LENGTH_SHORT).show();
+                    showError("삭제 실패");
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(FoodActivity.this, "오류 발생", Toast.LENGTH_SHORT).show();
+                android.util.Log.e("FoodActivity", "API Error", t);
+                showError("삭제 중 오류가 발생했습니다.");
             }
         });
     }

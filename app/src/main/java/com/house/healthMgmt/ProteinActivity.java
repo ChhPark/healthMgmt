@@ -1,6 +1,5 @@
 package com.house.healthMgmt;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -8,7 +7,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
@@ -18,9 +16,7 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -33,8 +29,9 @@ import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import android.widget.Toast;
 
-public class ProteinActivity extends AppCompatActivity {
+public class ProteinActivity extends BaseHealthActivity {
 
     private TextView tvTotalProtein;
     private TextView tvGoal;
@@ -43,34 +40,32 @@ public class ProteinActivity extends AppCompatActivity {
     private ListView lvTodayRecords;
     private Button btnConfirm;
 
-    private SupabaseApi apiService;
     private List<ProteinLog> logDataList = new ArrayList<>();
     private ProteinRecordAdapter recordAdapter;
 
     private String selectedFood = "";
-    private String currentUserId = "user_01";
     private Long editingLogId = null;
 
     private List<FoodType> foodTypeList = new ArrayList<>();
     private ArrayAdapter<FoodType> spinnerAdapter;
     
-    private String targetDate; 
+    private static final SimpleDateFormat DATE_FORMAT = 
+        new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+    private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
+        new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_protein);
+		
+		initializeUserId(); // ✅ 추가
         
-        // [수정 1] 가장 먼저 날짜를 받아와야 함 (순서 중요!)
-        targetDate = getIntent().getStringExtra("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        }
-
-        // [수정 2] 헤더 텍스트 설정 (함수로 분리)
+        targetDate = getTargetDateFromIntent();
+        apiService = SupabaseClient.getApi(this);
+        
         updateHeaderTitle();
 
-        // 1. UI 연결
         tvTotalProtein = findViewById(R.id.tv_total_protein);
         tvGoal = findViewById(R.id.tv_goal);
         etInput = findViewById(R.id.et_protein_input);
@@ -78,13 +73,8 @@ public class ProteinActivity extends AppCompatActivity {
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
 
-        // 2. API 초기화
-        apiService = SupabaseClient.getApi(this);
-
-        // 3. 스피너 설정
         setupSpinnerWithLongClick();
 
-        // 4. 리스트 어댑터 설정
         recordAdapter = new ProteinRecordAdapter(this, logDataList, new ProteinRecordAdapter.OnRecordActionListener() {
             @Override
             public void onEdit(ProteinLog log) {
@@ -97,50 +87,62 @@ public class ProteinActivity extends AppCompatActivity {
         });
         lvTodayRecords.setAdapter(recordAdapter);
 
-        // 5. 버튼 이벤트
         findViewById(R.id.btn_add_1).setOnClickListener(v -> addAmountToInput(1));
         findViewById(R.id.btn_add_5).setOnClickListener(v -> addAmountToInput(5));
         findViewById(R.id.btn_add_10).setOnClickListener(v -> addAmountToInput(10));
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
 
-        // 목표 텍스트 클릭 시 체중 화면으로 이동
-        tvGoal.setOnClickListener(v -> {
-            Intent intent = new Intent(ProteinActivity.this, WeightActivity.class);
-            startActivity(intent);
-        });
+        setupGoalClickListeners();
     }
+	
+	private void setupGoalClickListeners() {
+    // ✅ 클릭 효과 활성화
+    tvGoal.setClickable(true);
+    tvGoal.setFocusable(true);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+            new int[]{android.R.attr.selectableItemBackground});
+        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+        ta.recycle();
+    }
+    
+    tvGoal.setOnClickListener(v -> {
+        Toast.makeText(this, 
+            "💡 목표를 길게 누르면 체중 입력 화면으로 이동합니다", 
+            Toast.LENGTH_SHORT).show();
+    });
+    
+    tvGoal.setOnLongClickListener(v -> {
+        Intent intent = new Intent(ProteinActivity.this, WeightActivity.class);
+        startActivity(intent);
+        return true;
+    });
+}
 
-    // [수정 3] 액티비티가 재사용될 때 날짜와 헤더 모두 갱신
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent); 
         
-        targetDate = intent.getStringExtra("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        if (intent != null) {
+            setIntent(intent); 
+            targetDate = getTargetDateFromIntent();
+            updateHeaderTitle();
+            fetchTodayRecords();
         }
-        
-        // 날짜가 바뀌었으니 헤더와 데이터를 다시 불러옴
-        updateHeaderTitle();
-        fetchTodayRecords();
     }
 
-    // [수정 4] 헤더 텍스트 설정 로직을 별도 함수로 분리 (재사용 위해)
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
-            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+            String todayStr = DATE_FORMAT.format(new Date());
 
             if (targetDate.equals(todayStr)) {
                 tvHeader.setText("오늘의 기록");
             } else {
                 try {
-                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
-                    Date date = sdfInput.parse(targetDate);
-                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                    Date date = DATE_FORMAT.parse(targetDate);
+                    tvHeader.setText(DATE_FORMAT_DISPLAY.format(date) + "의 기록");
                 } catch (Exception e) {
                     tvHeader.setText(targetDate + "의 기록");
                 }
@@ -163,14 +165,15 @@ public class ProteinActivity extends AppCompatActivity {
                 if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
                     double weight = response.body().get(0).getWeight();
                     int goal = (int) Math.round(weight * 0.7);
-                    tvGoal.setText("목표: " + goal + "g (" + weight + "kg)");
+                    tvGoal.setText("목표: " + goal + "g (" + weight + "kg) ⓘ");
                 } else {
-                    tvGoal.setText("목표: 설정 필요 (클릭)");
+                    tvGoal.setText("목표: 설정 필요 ⓘ");
                 }
             }
             @Override
             public void onFailure(Call<List<WeightLog>> call, Throwable t) {
-                Log.e("ProteinActivity", "Weight fetch failed", t);
+                handleApiFailure(t);
+                tvGoal.setText("목표: 설정 필요 ⓘ");
             }
         });
     }
@@ -205,6 +208,9 @@ public class ProteinActivity extends AppCompatActivity {
     }
 
     private void fetchFoodTypes() {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         apiService.getFoodTypes().enqueue(new Callback<List<FoodType>>() {
             @Override
             public void onResponse(Call<List<FoodType>> call, Response<List<FoodType>> response) {
@@ -216,17 +222,23 @@ public class ProteinActivity extends AppCompatActivity {
                 }
             }
             @Override
-            public void onFailure(Call<List<FoodType>> call, Throwable t) {}
+            public void onFailure(Call<List<FoodType>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
     private void handleConfirmClick() {
         String inputStr = etInput.getText().toString();
         if (inputStr.isEmpty()) return;
-        int amount = Integer.parseInt(inputStr);
-
-        if (editingLogId == null) saveRecordToServer(amount);
-        else updateRecordToServer(editingLogId, amount);
+        
+        try {
+            int amount = Integer.parseInt(inputStr);
+            if (editingLogId == null) saveRecordToServer(amount);
+            else updateRecordToServer(editingLogId, amount);
+        } catch (NumberFormatException e) {
+            showError("숫자만 입력 가능합니다.");
+        }
     }
 
     private void loadRecordForEdit(ProteinLog log) {
@@ -249,19 +261,26 @@ public class ProteinActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         ProteinLog newLog = new ProteinLog(targetDate, selectedFood, amount, currentUserId);
         
         apiService.insertProtein(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(ProteinActivity.this, "저장됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("저장 실패");
                 }
             }
             @Override
-            public void onFailure(Call<Void> call, Throwable t) {}
+            public void onFailure(Call<Void> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -274,13 +293,17 @@ public class ProteinActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(ProteinActivity.this, "수정됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("수정 실패");
                 }
             }
             @Override
-            public void onFailure(Call<Void> call, Throwable t) {}
+            public void onFailure(Call<Void> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -298,10 +321,14 @@ public class ProteinActivity extends AppCompatActivity {
                     }
                     tvTotalProtein.setText(String.valueOf(totalSum));
                     recordAdapter.notifyDataSetChanged();
+                } else {
+                    showError("기록을 불러올 수 없습니다.");
                 }
             }
             @Override
-            public void onFailure(Call<List<ProteinLog>> call, Throwable t) {}
+            public void onFailure(Call<List<ProteinLog>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -318,10 +345,17 @@ public class ProteinActivity extends AppCompatActivity {
             apiService.deleteProtein("eq." + log.getId()).enqueue(new Callback<Void>() {
                 @Override
                 public void onResponse(Call<Void> call, Response<Void> response) {
-                    if (response.isSuccessful()) fetchTodayRecords();
+                    if (response.isSuccessful()) {
+                        showSuccess("삭제됨");
+                        fetchTodayRecords();
+                    } else {
+                        showError("삭제 실패");
+                    }
                 }
                 @Override
-                public void onFailure(Call<Void> call, Throwable t) {}
+                public void onFailure(Call<Void> call, Throwable t) {
+                    handleApiFailure(t);
+                }
             });
             dialog.dismiss();
         });

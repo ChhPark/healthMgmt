@@ -16,15 +16,12 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -37,8 +34,9 @@ import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import android.widget.Toast;
 
-public class WaterActivity extends AppCompatActivity {
+public class WaterActivity extends BaseHealthActivity {
 
     private TextView tvTotalWater;
     private TextView tvGoal;
@@ -47,30 +45,30 @@ public class WaterActivity extends AppCompatActivity {
     private ListView lvTodayRecords;
     private Button btnConfirm;
 
-    private SupabaseApi apiService;
     private List<WaterLog> logDataList = new ArrayList<>();
     private WaterAdapter adapter;
 
     private String selectedWater = "";
-    private String currentUserId = "user_01";
     private Long editingLogId = null;
-	private String targetDate; 
 
-    // [변경] 물 종류 관리용 리스트 (FoodType -> WaterType)
     private List<WaterType> waterTypeList = new ArrayList<>();
     private ArrayAdapter<WaterType> spinnerAdapter;
+    
+    private static final SimpleDateFormat DATE_FORMAT = 
+        new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+    private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
+        new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_water);
 		
-		targetDate = getIntent().getStringExtra("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        }
+		initializeUserId(); // ✅ 추가
+        
+        targetDate = getTargetDateFromIntent();
+        apiService = SupabaseClient.getApi(this);
 
-        // [수정] 2. 헤더 텍스트 설정 (함수 호출)
         updateHeaderTitle();
 
         tvTotalWater = findViewById(R.id.tv_total_water);
@@ -80,14 +78,10 @@ public class WaterActivity extends AppCompatActivity {
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
 
-        apiService = SupabaseClient.getApi(this);
-
         setupSpinnerWithLongClick();
+	
 
-        // 목표 텍스트 클릭 시 목표 설정 화면으로 이동
-        tvGoal.setOnClickListener(v -> {
-            startActivity(new Intent(WaterActivity.this, WaterTargetActivity.class));
-        });
+        setupGoalClickListeners();
 
         adapter = new WaterAdapter(this, logDataList, new WaterAdapter.OnRecordActionListener() {
             @Override
@@ -107,37 +101,53 @@ public class WaterActivity extends AppCompatActivity {
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
-	
-	    // [추가] 액티비티가 재사용될 때 날짜 갱신
+    
+	private void setupGoalClickListeners() {
+    // ✅ 클릭 효과 활성화
+    tvGoal.setClickable(true);
+    tvGoal.setFocusable(true);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+            new int[]{android.R.attr.selectableItemBackground});
+        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+        ta.recycle();
+    }
+    
+    tvGoal.setOnClickListener(v -> {
+        Toast.makeText(this, 
+            "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
+            Toast.LENGTH_SHORT).show();
+    });
+    
+    tvGoal.setOnLongClickListener(v -> {
+        startActivity(new Intent(WaterActivity.this, WaterTargetActivity.class));
+        return true;
+    });
+}
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent);
-
-        targetDate = intent.getStringExtra("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        
+        if (intent != null) {
+            setIntent(intent);
+            targetDate = getTargetDateFromIntent();
+            updateHeaderTitle();
+            fetchTodayRecords();
         }
-
-        updateHeaderTitle(); // 헤더 갱신
-        fetchTodayRecords(); // 데이터 다시 조회
     }
 
-    // [추가] 헤더 텍스트 변경 로직 (오늘 vs 과거/미래)
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
-            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+            String todayStr = DATE_FORMAT.format(new Date());
 
             if (targetDate.equals(todayStr)) {
                 tvHeader.setText("오늘의 기록");
             } else {
                 try {
-                    // 날짜 포맷 변경 (yyyy-MM-dd -> yyyy년 MM월 dd일)
-                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
-                    Date date = sdfInput.parse(targetDate);
-                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                    Date date = DATE_FORMAT.parse(targetDate);
+                    tvHeader.setText(DATE_FORMAT_DISPLAY.format(date) + "의 기록");
                 } catch (Exception e) {
                     tvHeader.setText(targetDate + "의 기록");
                 }
@@ -145,23 +155,20 @@ public class WaterActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onResume() {
         super.onResume();
-        updateGoalText();   // 목표값 갱신
-        fetchWaterTypes();  // 물 종류 목록 갱신 (관리 화면에서 돌아올 때 반영)
+        updateGoalText();
+        fetchWaterTypes();
         fetchTodayRecords();
     }
 
-    // 저장된 목표값 불러오기
     private void updateGoalText() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int target = prefs.getInt("water_target", 2000); // 기본값 2000
-        tvGoal.setText(String.format(Locale.KOREA, "목표: %,dcc 이상", target));
+        int target = prefs.getInt("water_target", 2000);
+		tvGoal.setText(String.format(Locale.KOREA, "목표: %,dcc 이상 ⓘ", target));
     }
 
-    // 스피너 설정 및 롱 클릭 리스너 (물 관리 화면 이동)
     private void setupSpinnerWithLongClick() {
         spinnerAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, waterTypeList);
         spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -176,7 +183,6 @@ public class WaterActivity extends AppCompatActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        // [핵심] 길게 누르면 "물 종류 관리" 화면으로 이동
         spinnerWaterType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -191,8 +197,10 @@ public class WaterActivity extends AppCompatActivity {
         });
     }
 
-    // 물 종류 목록 서버에서 가져오기
     private void fetchWaterTypes() {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         apiService.getWaterTypes().enqueue(new Callback<List<WaterType>>() {
             @Override
             public void onResponse(Call<List<WaterType>> call, Response<List<WaterType>> response) {
@@ -201,7 +209,6 @@ public class WaterActivity extends AppCompatActivity {
                     waterTypeList.addAll(response.body());
                     spinnerAdapter.notifyDataSetChanged();
 
-                    // 목록이 있으면 적절한 항목 선택 (기존 선택 유지 또는 첫 번째)
                     if (!waterTypeList.isEmpty()) {
                         boolean found = false;
                         for (int i = 0; i < waterTypeList.size(); i++) {
@@ -221,7 +228,9 @@ public class WaterActivity extends AppCompatActivity {
                 }
             }
             @Override
-            public void onFailure(Call<List<WaterType>> call, Throwable t) {}
+            public void onFailure(Call<List<WaterType>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -234,7 +243,7 @@ public class WaterActivity extends AppCompatActivity {
             if (editingLogId == null) saveRecordToServer(amount);
             else updateRecordToServer(editingLogId, amount);
         } catch (NumberFormatException e) {
-            Toast.makeText(this, "숫자만 입력 가능합니다.", Toast.LENGTH_SHORT).show();
+            showError("숫자만 입력 가능합니다.");
         }
     }
 
@@ -242,7 +251,6 @@ public class WaterActivity extends AppCompatActivity {
         editingLogId = log.getId();
         etInput.setText(String.format("%,d", log.getWaterAmount()));
         
-        // 스피너 선택
         for (int i = 0; i < waterTypeList.size(); i++) {
             if (waterTypeList.get(i).getName().equals(log.getWaterType())) {
                 spinnerWaterType.setSelection(i);
@@ -260,19 +268,24 @@ public class WaterActivity extends AppCompatActivity {
     }
 
     private void saveRecordToServer(int amount) {
+		if (!checkNetworkAndProceed()) { // ✅ 추가
+        return;
+    }
         WaterLog log = new WaterLog(targetDate, selectedWater, amount, currentUserId);
         apiService.insertWater(log).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(WaterActivity.this, "저장됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("저장 실패");
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                Toast.makeText(WaterActivity.this, "저장 실패", Toast.LENGTH_SHORT).show();
+                handleApiFailure(t);
             }
         });
     }
@@ -286,13 +299,17 @@ public class WaterActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(WaterActivity.this, "수정됨", Toast.LENGTH_SHORT).show();
+                    showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("수정 실패");
                 }
             }
             @Override
-            public void onFailure(Call<Void> call, Throwable t) {}
+            public void onFailure(Call<Void> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -310,10 +327,14 @@ public class WaterActivity extends AppCompatActivity {
                     }
                     tvTotalWater.setText(String.format("%,d", totalSum));
                     adapter.notifyDataSetChanged();
+                } else {
+                    showError("기록을 불러올 수 없습니다.");
                 }
             }
             @Override
-            public void onFailure(Call<List<WaterLog>> call, Throwable t) {}
+            public void onFailure(Call<List<WaterLog>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -330,10 +351,17 @@ public class WaterActivity extends AppCompatActivity {
             apiService.deleteWater("eq." + log.getId()).enqueue(new Callback<Void>() {
                 @Override
                 public void onResponse(Call<Void> call, Response<Void> response) {
-                    if (response.isSuccessful()) fetchTodayRecords();
+                    if (response.isSuccessful()) {
+                        showSuccess("삭제됨");
+                        fetchTodayRecords();
+                    } else {
+                        showError("삭제 실패");
+                    }
                 }
                 @Override
-                public void onFailure(Call<Void> call, Throwable t) {}
+                public void onFailure(Call<Void> call, Throwable t) {
+                    handleApiFailure(t);
+                }
             });
             dialog.dismiss();
         });
@@ -356,7 +384,6 @@ public class WaterActivity extends AppCompatActivity {
         etInput.setText(String.format("%,d", newVal));
     }
 
-    // [어댑터] 파란색 테마 및 cc 단위 적용
     private static class WaterAdapter extends ArrayAdapter<WaterLog> {
         private Context context;
         private List<WaterLog> logs;
@@ -378,7 +405,6 @@ public class WaterActivity extends AppCompatActivity {
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
             if (convertView == null) {
-                // 단백질/나트륨과 동일한 레이아웃 사용 (색상만 변경)
                 convertView = LayoutInflater.from(context).inflate(R.layout.item_protein_record, parent, false);
             }
 
@@ -389,7 +415,7 @@ public class WaterActivity extends AppCompatActivity {
             TextView tvUnit = convertView.findViewById(R.id.tv_unit);
             View colorBar = convertView.findViewById(R.id.v_color_bar);
 
-            int blueColor = Color.parseColor("#2196F3"); // 파란색
+            int blueColor = Color.parseColor("#2196F3");
 
             if (colorBar != null) colorBar.setBackgroundColor(blueColor);
             
@@ -398,7 +424,7 @@ public class WaterActivity extends AppCompatActivity {
                 tvAmount.setTextColor(blueColor);
             }
             if (tvUnit != null) {
-                tvUnit.setText("cc"); // 단위 변경
+                tvUnit.setText("cc");
                 tvUnit.setTextColor(blueColor);
             }
             if (tvName != null) {

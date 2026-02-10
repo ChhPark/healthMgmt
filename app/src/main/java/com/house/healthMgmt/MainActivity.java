@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -20,7 +21,8 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    // ... (기존 TextView 변수들 동일) ...
+    private static final String TAG = "MainActivity";
+    
     private TextView tvDateTitle;
     private TextView tvProteinValue;
     private TextView tvSodiumValue;
@@ -32,16 +34,21 @@ public class MainActivity extends AppCompatActivity {
     
     private SupabaseApi apiService;
     
-    // [수정] 날짜 관련 변수 통합 관리
-    private String todayDate; // API 쿼리에 사용되는 날짜 문자열 (yyyy-MM-dd)
+    private String todayDate;
     private Calendar currentCalendar = Calendar.getInstance();
+    
+    // ✅ [추가] SimpleDateFormat 재사용
+    private static final SimpleDateFormat DATE_FORMAT_QUERY = 
+        new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+    private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
+        new SimpleDateFormat("yyyy년 MM월 dd일 EEEE", Locale.KOREA);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. UI 연결
+        // UI 연결
         tvDateTitle = findViewById(R.id.tv_date_title);
         tvProteinValue = findViewById(R.id.tv_protein_value);
         tvSodiumValue = findViewById(R.id.tv_sodium_value);
@@ -53,71 +60,44 @@ public class MainActivity extends AppCompatActivity {
 
         apiService = SupabaseClient.getApi(this);
 
-        // 2. 초기 날짜 설정 (오늘 날짜로 초기화 및 UI 표시)
         updateDateDisplay(); 
 
-        // 3. 날짜 롱클릭 리스너 (달력 띄우기)
         tvDateTitle.setOnLongClickListener(v -> {
             showDatePicker();
             return true;
         });
 
-        // 4. 카드 클릭 리스너 설정 (화면 이동 + 날짜 전달)
-        // [중요] 중복 정의를 제거하고 아래와 같이 통합했습니다.
         setupCardListeners();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // 화면이 다시 보일 때마다 현재 설정된 날짜(todayDate) 기준으로 데이터 갱신
         refreshAllGoals();
     }
 
-    // [수정] 카드 클릭 리스너 통합 메서드
     private void setupCardListeners() {
-        // 단백질
         findViewById(R.id.card_protein).setOnClickListener(v -> navigateTo(ProteinActivity.class));
-        
-        // 나트륨
         findViewById(R.id.card_sodium).setOnClickListener(v -> navigateTo(SodiumActivity.class));
-        
-        // 물
         findViewById(R.id.card_water).setOnClickListener(v -> navigateTo(WaterActivity.class));
-        
-        // No음료수
         findViewById(R.id.card_no_beverage).setOnClickListener(v -> navigateTo(NoBeverageActivity.class));
-        
-        // No술
         findViewById(R.id.card_no_alcohol).setOnClickListener(v -> navigateTo(NoAlcoholActivity.class));
-        
-        // 수면
         findViewById(R.id.card_sleep).setOnClickListener(v -> navigateTo(SleepActivity.class));
-        
-        // 운동
         findViewById(R.id.card_exercise).setOnClickListener(v -> navigateTo(ExerciseActivity.class));
     }
 
-    // [추가] 화면 이동 공통 메서드 (날짜 전달 포함)
     private void navigateTo(Class<?> targetActivity) {
         Intent intent = new Intent(MainActivity.this, targetActivity);
-        // ★ 핵심: 현재 선택된 날짜(todayDate)를 넘겨줌
         intent.putExtra("target_date", todayDate); 
         startActivity(intent);
     }
 
-    // [수정] 달력 다이얼로그 표시
     private void showDatePicker() {
         DatePickerDialog datePickerDialog = new DatePickerDialog(
             this,
             (view, year, month, dayOfMonth) -> {
-                // 선택한 날짜로 Calendar 객체 갱신
                 currentCalendar.set(year, month, dayOfMonth);
-                
-                // UI 업데이트 및 날짜 변수 갱신
                 updateDateDisplay();
-                
-                // 변경된 날짜로 대시보드 O/X 데이터 다시 조회
                 refreshAllGoals();
             },
             currentCalendar.get(Calendar.YEAR),
@@ -127,29 +107,28 @@ public class MainActivity extends AppCompatActivity {
         datePickerDialog.show();
     }
 
-    // [수정] 날짜 UI 표시 및 변수 동기화 로직
     private void updateDateDisplay() {
-        // 1. 보여줄 형식 (예: 2026년 02월 09일)
-        SimpleDateFormat sdfDisplay = new SimpleDateFormat("yyyy년 MM월 dd일 EEEE", Locale.KOREA);
-        tvDateTitle.setText(sdfDisplay.format(currentCalendar.getTime()));
-
-        // 2. 서버 전송용 형식 (yyyy-MM-dd) 업데이트
-        SimpleDateFormat sdfQuery = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-        String selectedDateStr = sdfQuery.format(currentCalendar.getTime());
+    String dateText = DATE_FORMAT_DISPLAY.format(currentCalendar.getTime());
+    tvDateTitle.setText(dateText + " 📅"); // ✅ 달력 이모지 추가
+    
+    // ✅ 짧게 클릭하면 힌트 표시
+    tvDateTitle.setOnClickListener(v -> {
+        Toast.makeText(this, 
+            "💡 팁: 날짜를 길게 누르면 달력이 나타납니다!", 
+            Toast.LENGTH_LONG).show();
+    });
         
-        // [중요] API 쿼리에 쓰이는 변수(todayDate)를 선택된 날짜로 업데이트
+        String selectedDateStr = DATE_FORMAT_QUERY.format(currentCalendar.getTime());
         this.todayDate = selectedDateStr;
 
-        // 3. 오늘 날짜와 비교하여 색상 변경
-        String realTodayStr = sdfQuery.format(new Date());
+        String realTodayStr = DATE_FORMAT_QUERY.format(new Date());
         if (selectedDateStr.equals(realTodayStr)) {
-            tvDateTitle.setTextColor(Color.parseColor("#333333")); // 오늘이면 검정
+            tvDateTitle.setTextColor(Color.parseColor("#333333"));
         } else {
-            tvDateTitle.setTextColor(Color.RED); // 오늘이 아니면 빨강
+            tvDateTitle.setTextColor(Color.RED);
         }
     }
 
-    // --- [데이터 갱신 메서드 모음] ---
     private void refreshAllGoals() {
         checkProteinGoal();
         checkSodiumGoal();
@@ -160,9 +139,12 @@ public class MainActivity extends AppCompatActivity {
         checkExerciseGoal();
     }
 
-    // --- [아래 check...Goal 메서드들은 기존 소스 그대로 유지] ---
-    // todayDate 변수가 updateDateDisplay()에 의해 변경되었으므로, 
-    // 아래 메서드들은 자동으로 선택된 날짜의 데이터를 조회하게 됩니다.
+    // ✅ [추가] 공통 에러 처리 메서드
+    private void showError(String message) {
+        runOnUiThread(() -> 
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        );
+    }
 
     // 1. 단백질
     private void checkProteinGoal() {
@@ -178,15 +160,17 @@ public class MainActivity extends AppCompatActivity {
             }
             @Override
             public void onFailure(Call<List<WeightLog>> call, Throwable t) {
-                Log.e("MainActivity", "Weight Error", t);
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Weight Error", t);
+                tvProteinValue.setText("-");
+                showError("체중 데이터를 불러올 수 없습니다.");
             }
         });
     }
 
     private void calculateProteinStatus(double weight) {
         int goalLimit = (int) Math.round(weight * 0.7);
-        // todayDate는 이제 선택된 날짜입니다.
-        String dateQuery = "eq." + todayDate; 
+        String dateQuery = "eq." + todayDate;
 
         apiService.getTodayLogs(dateQuery).enqueue(new Callback<List<ProteinLog>>() {
             @Override
@@ -198,10 +182,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalProtein <= goalLimit; 
                     tvProteinValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvProteinValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<ProteinLog>> call, Throwable t) {}
+            public void onFailure(Call<List<ProteinLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Protein Error", t);
+                tvProteinValue.setText("-");
+            }
         });
     }
 
@@ -220,10 +210,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalSodium <= sodiumGoal;
                     tvSodiumValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvSodiumValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {}
+            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Sodium Error", t);
+                tvSodiumValue.setText("-");
+            }
         });
     }
 
@@ -243,10 +239,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalWater >= waterGoal;
                     tvWaterValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvWaterValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<WaterLog>> call, Throwable t) {}
+            public void onFailure(Call<List<WaterLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Water Error", t);
+                tvWaterValue.setText("-");
+            }
         });
     }
 
@@ -265,10 +267,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalBeverage == 0;
                     tvNoBeverageValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvNoBeverageValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<BeverageLog>> call, Throwable t) {}
+            public void onFailure(Call<List<BeverageLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Beverage Error", t);
+                tvNoBeverageValue.setText("-");
+            }
         });
     }
 
@@ -285,10 +293,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalAlcohol == 0;
                     tvNoAlcoholValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvNoAlcoholValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<AlcoholLog>> call, Throwable t) {}
+            public void onFailure(Call<List<AlcoholLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Alcohol Error", t);
+                tvNoAlcoholValue.setText("-");
+            }
         });
     }
 
@@ -308,10 +322,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalMinutes >= sleepGoal;
                     tvSleepValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvSleepValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<SleepLog>> call, Throwable t) {}
+            public void onFailure(Call<List<SleepLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Sleep Error", t);
+                tvSleepValue.setText("-");
+            }
         });
     }
 
@@ -331,10 +351,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     boolean isSuccess = totalMinutes >= exerciseGoal;
                     tvExerciseValue.setText(isSuccess ? "O" : "X");
+                } else {
+                    tvExerciseValue.setText("-");
                 }
             }
             @Override
-            public void onFailure(Call<List<ExerciseLog>> call, Throwable t) {}
+            public void onFailure(Call<List<ExerciseLog>> call, Throwable t) {
+                // ✅ [개선] 에러 처리
+                Log.e(TAG, "Exercise Error", t);
+                tvExerciseValue.setText("-");
+            }
         });
     }
 }
