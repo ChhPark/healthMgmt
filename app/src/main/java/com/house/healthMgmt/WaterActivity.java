@@ -54,6 +54,13 @@ public class WaterActivity extends BaseHealthActivity {
     private List<WaterType> waterTypeList = new ArrayList<>();
     private ArrayAdapter<WaterType> spinnerAdapter;
     
+    private boolean isOzMode = false;
+    private static final double OZ_TO_CC = 29.5735;
+    private TextView btnToggleUnit;
+    private Button btnAdd10;
+    private Button btnAdd100;
+    private Button btnAdd500;
+    
     private static final SimpleDateFormat DATE_FORMAT = 
         new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
     private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
@@ -64,7 +71,7 @@ public class WaterActivity extends BaseHealthActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_water);
 		
-		initializeUserId(); // ✅ 추가
+		initializeUserId();
         
         targetDate = getTargetDateFromIntent();
         apiService = SupabaseClient.getApi(this);
@@ -77,9 +84,13 @@ public class WaterActivity extends BaseHealthActivity {
         spinnerWaterType = findViewById(R.id.spinner_water_type);
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
+        
+        btnToggleUnit = findViewById(R.id.btn_toggle_unit);
+        btnAdd10 = findViewById(R.id.btn_add_10);
+        btnAdd100 = findViewById(R.id.btn_add_100);
+        btnAdd500 = findViewById(R.id.btn_add_500);
 
         setupSpinnerWithLongClick();
-	
 
         setupGoalClickListeners();
 
@@ -95,15 +106,38 @@ public class WaterActivity extends BaseHealthActivity {
         });
         lvTodayRecords.setAdapter(adapter);
 
-        findViewById(R.id.btn_add_10).setOnClickListener(v -> addAmountToInput(10));
-        findViewById(R.id.btn_add_100).setOnClickListener(v -> addAmountToInput(100));
-        findViewById(R.id.btn_add_500).setOnClickListener(v -> addAmountToInput(500));
+        btnToggleUnit.setOnClickListener(v -> toggleUnit());
+        
+        btnAdd10.setOnClickListener(v -> addAmountToInput(isOzMode ? 1 : 10));
+        btnAdd100.setOnClickListener(v -> addAmountToInput(isOzMode ? 5 : 100));
+        btnAdd500.setOnClickListener(v -> addAmountToInput(isOzMode ? 10 : 500));
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
     
+    private void toggleUnit() {
+        isOzMode = !isOzMode;
+        updateUnitButtons();
+        etInput.setText("");
+    }
+    
+    private void updateUnitButtons() {
+        if (isOzMode) {
+            btnToggleUnit.setText("oz");
+            btnAdd10.setText("+1oz");
+            btnAdd100.setText("+5oz");
+            btnAdd500.setText("+10oz");
+            etInput.setHint("oz 입력");
+        } else {
+            btnToggleUnit.setText("cc");
+            btnAdd10.setText("+10cc");
+            btnAdd100.setText("+100cc");
+            btnAdd500.setText("+500cc");
+            etInput.setHint("cc 입력");
+        }
+    }
+    
 	private void setupGoalClickListeners() {
-    // ✅ 클릭 효과 활성화
     tvGoal.setClickable(true);
     tvGoal.setFocusable(true);
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
@@ -198,7 +232,7 @@ public class WaterActivity extends BaseHealthActivity {
     }
 
     private void fetchWaterTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
+		if (!checkNetworkAndProceed()) {
         return;
     }
         apiService.getWaterTypes().enqueue(new Callback<List<WaterType>>() {
@@ -239,9 +273,11 @@ public class WaterActivity extends BaseHealthActivity {
         if (inputStr.isEmpty()) return;
 
         try {
-            int amount = Integer.parseInt(inputStr.replace(",", ""));
-            if (editingLogId == null) saveRecordToServer(amount);
-            else updateRecordToServer(editingLogId, amount);
+            int inputValue = Integer.parseInt(inputStr.replace(",", ""));
+            int amountInCc = isOzMode ? (int)Math.round(inputValue * OZ_TO_CC) : inputValue;
+            
+            if (editingLogId == null) saveRecordToServer(amountInCc);
+            else updateRecordToServer(editingLogId, amountInCc);
         } catch (NumberFormatException e) {
             showError("숫자만 입력 가능합니다.");
         }
@@ -268,7 +304,7 @@ public class WaterActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int amount) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
+		if (!checkNetworkAndProceed()) {
         return;
     }
         WaterLog log = new WaterLog(targetDate, selectedWater, amount, currentUserId);
@@ -381,13 +417,19 @@ public class WaterActivity extends BaseHealthActivity {
         } catch (Exception e) {}
         
         int newVal = currentVal + amount;
-        etInput.setText(String.format("%,d", newVal));
+        
+        if (isOzMode) {
+            etInput.setText(String.valueOf(newVal));
+        } else {
+            etInput.setText(String.format("%,d", newVal));
+        }
     }
 
     private static class WaterAdapter extends ArrayAdapter<WaterLog> {
         private Context context;
         private List<WaterLog> logs;
         private OnRecordActionListener listener;
+        private static final double OZ_TO_CC = 29.5735;
 
         public interface OnRecordActionListener {
             void onEdit(WaterLog log);
@@ -420,11 +462,18 @@ public class WaterActivity extends BaseHealthActivity {
             if (colorBar != null) colorBar.setBackgroundColor(blueColor);
             
             if (tvAmount != null) {
-                tvAmount.setText(String.format("%,d", log.getWaterAmount()));
+                int cc = log.getWaterAmount();
+                int oz = (int)Math.round(cc / OZ_TO_CC);
+                
+                if (oz > 0) {
+                    tvAmount.setText(String.format("%,dcc (%doz)", cc, oz));
+                } else {
+                    tvAmount.setText(String.format("%,d", cc));
+                }
                 tvAmount.setTextColor(blueColor);
             }
             if (tvUnit != null) {
-                tvUnit.setText("cc");
+                tvUnit.setText("");
                 tvUnit.setTextColor(blueColor);
             }
             if (tvName != null) {

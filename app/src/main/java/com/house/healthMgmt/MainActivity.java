@@ -44,31 +44,51 @@ public class MainActivity extends AppCompatActivity {
         new SimpleDateFormat("yyyy년 MM월 dd일 EEEE", Locale.KOREA);
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        // UI 연결
-        tvDateTitle = findViewById(R.id.tv_date_title);
-        tvProteinValue = findViewById(R.id.tv_protein_value);
-        tvSodiumValue = findViewById(R.id.tv_sodium_value);
-        tvWaterValue = findViewById(R.id.tv_water_value);
-        tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
-        tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
-        tvSleepValue = findViewById(R.id.tv_sleep_value);
-        tvExerciseValue = findViewById(R.id.tv_exercise_value);
-
-        apiService = SupabaseClient.getApi(this);
-
-        updateDateDisplay(); 
-
-        tvDateTitle.setOnLongClickListener(v -> {
-            showDatePicker();
-            return true;
-        });
-
-        setupCardListeners();
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_main);
+    
+    // ✅ 월별 리포트에서 전달받은 날짜 확인
+    Intent intent = getIntent();
+    if (intent != null && intent.hasExtra("target_date")) {
+        String targetDate = intent.getStringExtra("target_date");
+        // 해당 날짜로 캘린더 설정
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+            Date date = sdf.parse(targetDate);
+            currentCalendar.setTime(date);
+            updateDateDisplay();
+        } catch (Exception e) {
+            // 파싱 실패 시 오늘 날짜 사용
+        }
     }
+
+    // UI 연결
+    tvDateTitle = findViewById(R.id.tv_date_title);
+    tvProteinValue = findViewById(R.id.tv_protein_value);
+    tvSodiumValue = findViewById(R.id.tv_sodium_value);
+    tvWaterValue = findViewById(R.id.tv_water_value);
+    tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
+    tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
+    tvSleepValue = findViewById(R.id.tv_sleep_value);
+    tvExerciseValue = findViewById(R.id.tv_exercise_value);
+
+    apiService = SupabaseClient.getApi(this);
+
+    updateDateDisplay(); 
+
+    tvDateTitle.setOnLongClickListener(v -> {
+        showDatePicker();
+        return true;
+    });
+
+    setupCardListeners();
+    
+    // ✅ 월별 리포트 버튼 (수정됨)
+    findViewById(R.id.btn_monthly_report).setOnClickListener(v -> 
+        startActivity(new Intent(MainActivity.this, MonthlyReportActivity.class))
+    );
+}
 
     @Override
     protected void onResume() {

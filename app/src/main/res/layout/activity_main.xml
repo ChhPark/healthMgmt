@@ -22,6 +22,24 @@
             android:textSize="20sp"
             android:textStyle="bold" />
     </RelativeLayout>
+	
+	<Button
+    android:id="@+id/btn_monthly_report"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="월별 리포트"
+    android:textSize="16sp"
+    android:textColor="#333333"
+    android:textStyle="bold"
+    android:background="#E8F5E9"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginBottom="8dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp" />
 
     <ScrollView
         android:layout_width="match_parent"

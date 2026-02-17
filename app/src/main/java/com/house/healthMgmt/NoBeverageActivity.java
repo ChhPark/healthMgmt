@@ -15,7 +15,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -23,7 +22,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -55,20 +53,26 @@ public class NoBeverageActivity extends BaseHealthActivity {
 
     private List<BeverageType> beverageTypeList = new ArrayList<>();
     private ArrayAdapter<BeverageType> spinnerAdapter;
+    
+    private boolean isOzMode = false;
+    private static final double OZ_TO_CC = 29.5735;
+    private TextView btnToggleUnit;
+    private Button btnAdd10;
+    private Button btnAdd100;
+    private Button btnAdd500;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_no_beverage);
 		
-		initializeUserId(); // ✅ 추가
+		initializeUserId();
 		
-		targetDate = getTargetDateFromIntent(); // ("target_date");
+		targetDate = getTargetDateFromIntent();
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        // [수정] 2. 헤더 텍스트 갱신 함수 호출
         updateHeaderTitle();
 
         tvTotalBeverage = findViewById(R.id.tv_total_beverage);
@@ -76,6 +80,11 @@ public class NoBeverageActivity extends BaseHealthActivity {
         spinnerBeverageType = findViewById(R.id.spinner_beverage_type);
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
+        
+        btnToggleUnit = findViewById(R.id.btn_toggle_unit);
+        btnAdd10 = findViewById(R.id.btn_add_10);
+        btnAdd100 = findViewById(R.id.btn_add_100);
+        btnAdd500 = findViewById(R.id.btn_add_500);
 
         apiService = SupabaseClient.getApi(this);
 
@@ -93,14 +102,37 @@ public class NoBeverageActivity extends BaseHealthActivity {
         });
         lvTodayRecords.setAdapter(adapter);
 
-        findViewById(R.id.btn_add_10).setOnClickListener(v -> addAmountToInput(10));
-        findViewById(R.id.btn_add_100).setOnClickListener(v -> addAmountToInput(100));
-        findViewById(R.id.btn_add_500).setOnClickListener(v -> addAmountToInput(500));
+        btnToggleUnit.setOnClickListener(v -> toggleUnit());
+        
+        btnAdd10.setOnClickListener(v -> addAmountToInput(isOzMode ? 1 : 10));
+        btnAdd100.setOnClickListener(v -> addAmountToInput(isOzMode ? 5 : 100));
+        btnAdd500.setOnClickListener(v -> addAmountToInput(isOzMode ? 10 : 500));
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
+    
+    private void toggleUnit() {
+        isOzMode = !isOzMode;
+        updateUnitButtons();
+        etInput.setText("");
+    }
+    
+    private void updateUnitButtons() {
+        if (isOzMode) {
+            btnToggleUnit.setText("oz");
+            btnAdd10.setText("+1oz");
+            btnAdd100.setText("+5oz");
+            btnAdd500.setText("+10oz");
+            etInput.setHint("oz 입력");
+        } else {
+            btnToggleUnit.setText("cc");
+            btnAdd10.setText("+10cc");
+            btnAdd100.setText("+100cc");
+            btnAdd500.setText("+500cc");
+            etInput.setHint("cc 입력");
+        }
+    }
 	
-	    // [추가] 액티비티 재사용 시 날짜 갱신
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -111,11 +143,10 @@ public class NoBeverageActivity extends BaseHealthActivity {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        updateHeaderTitle(); // 헤더 갱신
-        fetchTodayRecords(); // 데이터 다시 조회
+        updateHeaderTitle();
+        fetchTodayRecords();
     }
 
-    // [추가] 헤더 텍스트 변경 로직
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
@@ -173,7 +204,7 @@ public class NoBeverageActivity extends BaseHealthActivity {
     }
 
     private void fetchBeverageTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
+		if (!checkNetworkAndProceed()) {
         return;
     }
         apiService.getBeverageTypes().enqueue(new Callback<List<BeverageType>>() {
@@ -212,9 +243,11 @@ public class NoBeverageActivity extends BaseHealthActivity {
         if (inputStr.isEmpty()) return;
 
         try {
-            int amount = Integer.parseInt(inputStr.replace(",", ""));
-            if (editingLogId == null) saveRecordToServer(amount);
-            else updateRecordToServer(editingLogId, amount);
+            int inputValue = Integer.parseInt(inputStr.replace(",", ""));
+            int amountInCc = isOzMode ? (int)Math.round(inputValue * OZ_TO_CC) : inputValue;
+            
+            if (editingLogId == null) saveRecordToServer(amountInCc);
+            else updateRecordToServer(editingLogId, amountInCc);
         } catch (NumberFormatException e) {
             Toast.makeText(this, "숫자만 입력 가능합니다.", Toast.LENGTH_SHORT).show();
         }
@@ -241,7 +274,7 @@ public class NoBeverageActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int amount) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
+		if (!checkNetworkAndProceed()) {
         return;
     }
         BeverageLog log = new BeverageLog(targetDate, selectedBeverage, amount, currentUserId);
@@ -290,7 +323,6 @@ public class NoBeverageActivity extends BaseHealthActivity {
                     int totalSum = 0;
                     
                     for (BeverageLog log : response.body()) {
-                        // [수정] "디카페인 커피"는 합계에서 제외
                         if (!"디카페인 커피".equals(log.getBeverageType())) {
                             totalSum += log.getAmount();
                         }
@@ -341,13 +373,19 @@ public class NoBeverageActivity extends BaseHealthActivity {
         } catch (Exception e) {}
         
         int newVal = currentVal + amount;
-        etInput.setText(String.format("%,d", newVal));
+        
+        if (isOzMode) {
+            etInput.setText(String.valueOf(newVal));
+        } else {
+            etInput.setText(String.format("%,d", newVal));
+        }
     }
 
     private static class BeverageAdapter extends ArrayAdapter<BeverageLog> {
         private Context context;
         private List<BeverageLog> logs;
         private OnRecordActionListener listener;
+        private static final double OZ_TO_CC = 29.5735;
 
         public interface OnRecordActionListener {
             void onEdit(BeverageLog log);
@@ -380,11 +418,18 @@ public class NoBeverageActivity extends BaseHealthActivity {
             if (colorBar != null) colorBar.setBackgroundColor(redColor);
             
             if (tvAmount != null) {
-                tvAmount.setText(String.format("%,d", log.getAmount()));
+                int cc = log.getAmount();
+                int oz = (int)Math.round(cc / OZ_TO_CC);
+                
+                if (oz > 0) {
+                    tvAmount.setText(String.format("%,dcc (%doz)", cc, oz));
+                } else {
+                    tvAmount.setText(String.format("%,d", cc));
+                }
                 tvAmount.setTextColor(redColor);
             }
             if (tvUnit != null) {
-                tvUnit.setText("cc");
+                tvUnit.setText("");
                 tvUnit.setTextColor(redColor);
             }
             if (tvName != null) {

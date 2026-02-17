@@ -9,6 +9,7 @@ import retrofit2.http.GET;
 import retrofit2.http.PATCH;
 import retrofit2.http.POST;
 import retrofit2.http.Query;
+import retrofit2.http.Url;
 
 public interface SupabaseApi {
 
@@ -165,4 +166,25 @@ public interface SupabaseApi {
 
     @DELETE("/rest/v1/health_exercise_type")
     Call<Void> deleteExerciseType(@Query("id") String idQuery);
+	
+	@GET
+    Call<List<ProteinLog>> getProteinLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<SodiumLog>> getSodiumLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<WaterLog>> getWaterLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<BeverageLog>> getBeverageLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<AlcoholLog>> getAlcoholLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<SleepLog>> getSleepLogsInRange(@Url String url);
+    
+    @GET
+    Call<List<ExerciseLog>> getExerciseLogsInRange(@Url String url);
 }
