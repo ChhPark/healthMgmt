@@ -16,6 +16,10 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 
 import java.text.SimpleDateFormat;
@@ -29,7 +33,9 @@ import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-import android.widget.Toast;
+
+import java.util.Collections; // [추가]
+    import java.util.Comparator;  // [추가]
 
 public class ProteinActivity extends BaseHealthActivity {
 
@@ -46,24 +52,41 @@ public class ProteinActivity extends BaseHealthActivity {
     private String selectedFood = "";
     private Long editingLogId = null;
 
+    // [추가] 선택 화면에서 돌아왔을 때, 선택해야 할 음식을 잠시 기억하는 변수
+    private String pendingFoodSelection = null;
+
     private List<FoodType> foodTypeList = new ArrayList<>();
     private ArrayAdapter<FoodType> spinnerAdapter;
-    
-    private static final SimpleDateFormat DATE_FORMAT = 
-        new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-    private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
-        new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+
+    private static final SimpleDateFormat DATE_FORMAT =
+            new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+    private static final SimpleDateFormat DATE_FORMAT_DISPLAY =
+            new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+
+    // [수정] 결과를 받아와서 변수에만 저장 (실제 반영은 onResume의 fetchFoodTypes에서)
+    private final ActivityResultLauncher<Intent> foodActivityLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_food");
+                    if (selectedName != null) {
+                        this.pendingFoodSelection = selectedName;
+                        this.selectedFood = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_protein);
-		
-		initializeUserId(); // ✅ 추가
-        
+
+        initializeUserId();
+
         targetDate = getTargetDateFromIntent();
         apiService = SupabaseClient.getApi(this);
-        
+
         updateHeaderTitle();
 
         tvTotalProtein = findViewById(R.id.tv_total_protein);
@@ -80,6 +103,7 @@ public class ProteinActivity extends BaseHealthActivity {
             public void onEdit(ProteinLog log) {
                 loadRecordForEdit(log);
             }
+
             @Override
             public void onDelete(ProteinLog log) {
                 showDeleteConfirmDialog(log);
@@ -95,37 +119,36 @@ public class ProteinActivity extends BaseHealthActivity {
 
         setupGoalClickListeners();
     }
-	
-	private void setupGoalClickListeners() {
-    // ✅ 클릭 효과 활성화
-    tvGoal.setClickable(true);
-    tvGoal.setFocusable(true);
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
-            new int[]{android.R.attr.selectableItemBackground});
-        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
-        ta.recycle();
+
+    private void setupGoalClickListeners() {
+        tvGoal.setClickable(true);
+        tvGoal.setFocusable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+                    new int[]{android.R.attr.selectableItemBackground});
+            tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+            ta.recycle();
+        }
+
+        tvGoal.setOnClickListener(v -> {
+            Toast.makeText(this,
+                    "💡 목표를 길게 누르면 체중 입력 화면으로 이동합니다",
+                    Toast.LENGTH_SHORT).show();
+        });
+
+        tvGoal.setOnLongClickListener(v -> {
+            Intent intent = new Intent(ProteinActivity.this, WeightActivity.class);
+            startActivity(intent);
+            return true;
+        });
     }
-    
-    tvGoal.setOnClickListener(v -> {
-        Toast.makeText(this, 
-            "💡 목표를 길게 누르면 체중 입력 화면으로 이동합니다", 
-            Toast.LENGTH_SHORT).show();
-    });
-    
-    tvGoal.setOnLongClickListener(v -> {
-        Intent intent = new Intent(ProteinActivity.this, WeightActivity.class);
-        startActivity(intent);
-        return true;
-    });
-}
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        
+
         if (intent != null) {
-            setIntent(intent); 
+            setIntent(intent);
             targetDate = getTargetDateFromIntent();
             updateHeaderTitle();
             fetchTodayRecords();
@@ -153,7 +176,7 @@ public class ProteinActivity extends BaseHealthActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        fetchFoodTypes();
+        fetchFoodTypes(); // 여기서 목록 갱신 + 자동 선택 수행
         fetchTodayRecords();
         updateGoalFromWeight();
     }
@@ -170,6 +193,7 @@ public class ProteinActivity extends BaseHealthActivity {
                     tvGoal.setText("목표: 설정 필요 ⓘ");
                 }
             }
+
             @Override
             public void onFailure(Call<List<WeightLog>> call, Throwable t) {
                 handleApiFailure(t);
@@ -188,8 +212,10 @@ public class ProteinActivity extends BaseHealthActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (!foodTypeList.isEmpty()) selectedFood = foodTypeList.get(position).getName();
             }
+
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
 
         spinnerFoodType.setOnLongClickListener(v -> {
@@ -202,25 +228,71 @@ public class ProteinActivity extends BaseHealthActivity {
                 }
             }
             Intent intent = new Intent(ProteinActivity.this, FoodActivity.class);
-            startActivity(intent);
+            foodActivityLauncher.launch(intent);
             return true;
         });
     }
 
+    // [수정] 단 하나만 존재하는 fetchFoodTypes 메서드
+        // ... (기존 imports 유지) ...
+    
+
+    // ... (중략) ...
+
     private void fetchFoodTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+        if (!checkNetworkAndProceed()) {
+            return;
+        }
         apiService.getFoodTypes().enqueue(new Callback<List<FoodType>>() {
             @Override
             public void onResponse(Call<List<FoodType>> call, Response<List<FoodType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     foodTypeList.clear();
-                    foodTypeList.addAll(response.body());
+                    
+                    // 서버에서 받은 리스트
+                    List<FoodType> fetchedList = response.body();
+
+                    // [수정] ID 기준 내림차순 정렬 (최신 등록된 음식이 상단으로)
+                    Collections.sort(fetchedList, new Comparator<FoodType>() {
+                        @Override
+                        public int compare(FoodType o1, FoodType o2) {
+                            // o2(뒤) - o1(앞) = 내림차순 (ID가 클수록 최신)
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    foodTypeList.addAll(fetchedList);
                     spinnerAdapter.notifyDataSetChanged();
-                    if (!foodTypeList.isEmpty()) selectedFood = foodTypeList.get(0).getName();
+
+                    // [선택 로직 유지] 선택 화면에서 받아온 값이 있나요?
+                    if (pendingFoodSelection != null) {
+                        for (int i = 0; i < foodTypeList.size(); i++) {
+                            if (foodTypeList.get(i).getName().equals(pendingFoodSelection)) {
+                                spinnerFoodType.setSelection(i);
+                                selectedFood = pendingFoodSelection;
+                                break;
+                            }
+                        }
+                        pendingFoodSelection = null; // 사용 후 초기화
+                    }
+                    // 받아온 값이 없고, 현재 선택된 값이 리스트에 없다면 기본값 선택
+                    else if (!foodTypeList.isEmpty()) {
+                        boolean currentSelectionExists = false;
+                        for (int i = 0; i < foodTypeList.size(); i++) {
+                            if (foodTypeList.get(i).getName().equals(selectedFood)) {
+                                spinnerFoodType.setSelection(i);
+                                currentSelectionExists = true;
+                                break;
+                            }
+                        }
+                        if (!currentSelectionExists) {
+                            spinnerFoodType.setSelection(0);
+                            selectedFood = foodTypeList.get(0).getName();
+                        }
+                    }
                 }
             }
+
             @Override
             public void onFailure(Call<List<FoodType>> call, Throwable t) {
                 handleApiFailure(t);
@@ -228,10 +300,11 @@ public class ProteinActivity extends BaseHealthActivity {
         });
     }
 
+
     private void handleConfirmClick() {
         String inputStr = etInput.getText().toString();
         if (inputStr.isEmpty()) return;
-        
+
         try {
             int amount = Integer.parseInt(inputStr);
             if (editingLogId == null) saveRecordToServer(amount);
@@ -261,11 +334,11 @@ public class ProteinActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int amount) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+        if (!checkNetworkAndProceed()) {
+            return;
+        }
         ProteinLog newLog = new ProteinLog(targetDate, selectedFood, amount, currentUserId);
-        
+
         apiService.insertProtein(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -277,6 +350,7 @@ public class ProteinActivity extends BaseHealthActivity {
                     showError("저장 실패");
                 }
             }
+
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
                 handleApiFailure(t);
@@ -300,6 +374,7 @@ public class ProteinActivity extends BaseHealthActivity {
                     showError("수정 실패");
                 }
             }
+
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
                 handleApiFailure(t);
@@ -325,6 +400,7 @@ public class ProteinActivity extends BaseHealthActivity {
                     showError("기록을 불러올 수 없습니다.");
                 }
             }
+
             @Override
             public void onFailure(Call<List<ProteinLog>> call, Throwable t) {
                 handleApiFailure(t);
@@ -352,6 +428,7 @@ public class ProteinActivity extends BaseHealthActivity {
                         showError("삭제 실패");
                     }
                 }
+
                 @Override
                 public void onFailure(Call<Void> call, Throwable t) {
                     handleApiFailure(t);
@@ -366,7 +443,10 @@ public class ProteinActivity extends BaseHealthActivity {
     private void addAmountToInput(int amount) {
         String currentText = etInput.getText().toString();
         int currentVal = 0;
-        try { currentVal = Integer.parseInt(currentText); } catch (Exception e) {}
+        try {
+            currentVal = Integer.parseInt(currentText);
+        } catch (Exception e) {
+        }
         etInput.setText(String.valueOf(currentVal + amount));
     }
 }

@@ -19,12 +19,17 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -49,7 +54,10 @@ public class NoAlcoholActivity extends BaseHealthActivity {
 
     private String selectedAlcohol = "";
     private Long editingLogId = null;
-	private String targetDate;
+	private String targetDate; 
+
+    // [자동 선택] 선택 후 돌아왔을 때 값을 기억하는 변수
+    private String pendingAlcoholSelection = null;
 
     private List<AlcoholType> alcoholTypeList = new ArrayList<>();
     private ArrayAdapter<AlcoholType> spinnerAdapter;
@@ -60,6 +68,20 @@ public class NoAlcoholActivity extends BaseHealthActivity {
     private Button btnAdd10;
     private Button btnAdd100;
     private Button btnAdd500;
+
+    // [Launcher] 결과 처리 런처 추가
+    private final ActivityResultLauncher<Intent> alcoholTypeLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_alcohol");
+                    if (selectedName != null) {
+                        this.pendingAlcoholSelection = selectedName;
+                        this.selectedAlcohol = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -119,13 +141,13 @@ public class NoAlcoholActivity extends BaseHealthActivity {
     
     private void updateUnitButtons() {
         if (isOzMode) {
-            btnToggleUnit.setText("oz");
+            btnToggleUnit.setText("단위: oz");
             btnAdd10.setText("+1oz");
             btnAdd100.setText("+5oz");
             btnAdd500.setText("+10oz");
             etInput.setHint("oz 입력");
         } else {
-            btnToggleUnit.setText("cc");
+            btnToggleUnit.setText("단위: cc");
             btnAdd10.setText("+10cc");
             btnAdd100.setText("+100cc");
             btnAdd500.setText("+500cc");
@@ -189,6 +211,7 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
+        // [수정] Launcher 사용하여 관리 화면 호출
         spinnerAlcoholType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -198,11 +221,13 @@ public class NoAlcoholActivity extends BaseHealthActivity {
                     vibrator.vibrate(100);
                 }
             }
-            startActivity(new Intent(NoAlcoholActivity.this, AlcoholTypeActivity.class));
+            Intent intent = new Intent(NoAlcoholActivity.this, AlcoholTypeActivity.class);
+            alcoholTypeLauncher.launch(intent);
             return true;
         });
     }
 
+    // [정렬 및 자동 선택 로직 적용]
     private void fetchAlcoholTypes() {
 		if (!checkNetworkAndProceed()) {
         return;
@@ -212,10 +237,30 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             public void onResponse(Call<List<AlcoholType>> call, Response<List<AlcoholType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     alcoholTypeList.clear();
-                    alcoholTypeList.addAll(response.body());
+                    List<AlcoholType> fetched = response.body();
+
+                    // 최신순 정렬
+                    Collections.sort(fetched, new Comparator<AlcoholType>() {
+                        @Override
+                        public int compare(AlcoholType o1, AlcoholType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    alcoholTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
-                    
-                    if (!alcoholTypeList.isEmpty()) {
+
+                    // 자동 선택 처리
+                    if (pendingAlcoholSelection != null) {
+                        for (int i = 0; i < alcoholTypeList.size(); i++) {
+                            if (alcoholTypeList.get(i).getName().equals(pendingAlcoholSelection)) {
+                                spinnerAlcoholType.setSelection(i);
+                                selectedAlcohol = pendingAlcoholSelection;
+                                break;
+                            }
+                        }
+                        pendingAlcoholSelection = null;
+                    } else if (!alcoholTypeList.isEmpty()) {
                         boolean found = false;
                         for (int i = 0; i < alcoholTypeList.size(); i++) {
                             if (alcoholTypeList.get(i).getName().equals(selectedAlcohol)) {
@@ -394,7 +439,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             this.logs = logs;
             this.listener = listener;
         }
-
         @NonNull
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
@@ -410,35 +454,40 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             View colorBar = convertView.findViewById(R.id.v_color_bar);
 
             int purpleColor = Color.parseColor("#9C27B0");
-
             if (colorBar != null) colorBar.setBackgroundColor(purpleColor);
             
             if (tvAmount != null) {
                 int cc = log.getAmount();
-                int oz = (int)Math.round(cc / OZ_TO_CC);
                 
-                if (oz > 0) {
+                // [핵심 로직] oz 단위 입력 여부 판단
+                double ozVal = cc / OZ_TO_CC;
+                boolean isInputByOz = Math.abs(ozVal - Math.round(ozVal)) < 0.1; 
+
+                if (isInputByOz && cc > 0) {
+                    int oz = (int)Math.round(ozVal);
                     tvAmount.setText(String.format("%,dcc (%doz)", cc, oz));
+                    if (tvUnit != null) tvUnit.setText("");
                 } else {
                     tvAmount.setText(String.format("%,d", cc));
+                    if (tvUnit != null) tvUnit.setText("cc");
                 }
+                
                 tvAmount.setTextColor(purpleColor);
+                if (tvUnit != null) tvUnit.setTextColor(purpleColor);
             }
-            if (tvUnit != null) {
-                tvUnit.setText("");
-                tvUnit.setTextColor(purpleColor);
-            }
+            
             if (tvName != null) {
                 tvName.setText(log.getAlcoholType());
             }
 
+            // ... (버튼 이벤트 기존 동일) ...
             View btnEdit = convertView.findViewById(R.id.iv_edit);
             View btnDelete = convertView.findViewById(R.id.iv_delete);
-
             if (btnEdit != null) btnEdit.setOnClickListener(v -> listener.onEdit(log));
             if (btnDelete != null) btnDelete.setOnClickListener(v -> listener.onDelete(log));
 
             return convertView;
         }
+
     }
 }

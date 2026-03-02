@@ -20,13 +20,16 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -46,31 +49,51 @@ public class ExerciseActivity extends BaseHealthActivity {
     private ListView lvTodayRecords;
     private Button btnConfirm;
 
+    // 빠른 추가 버튼 멤버 변수화 (동적 변경을 위해)
+    private Button btnAdd1;
+    private Button btnAdd10;
+    private Button btnAdd30;
+
     private SupabaseApi apiService;
     private List<ExerciseLog> logDataList = new ArrayList<>();
     private ExerciseAdapter adapter;
 
     private String selectedType = "";
     private Long editingLogId = null;
-	private String targetDate;
+    private String targetDate;
 
-    // 운동 종류 관리용 리스트
+    // [자동 선택] 선택 후 돌아왔을 때 값을 기억하는 변수
+    private String pendingExerciseSelection = null;
+
     private List<ExerciseType> exerciseTypeList = new ArrayList<>();
     private ArrayAdapter<ExerciseType> spinnerAdapter;
+
+    // [Launcher] 관리 화면 결과 처리
+    private final ActivityResultLauncher<Intent> exerciseTypeLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_exercise_type");
+                    if (selectedName != null) {
+                        this.pendingExerciseSelection = selectedName;
+                        this.selectedType = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_exercise);
 		
-		initializeUserId(); // ✅ 추가
+        initializeUserId();
 		
-		targetDate = getTargetDateFromIntent(); // ("target_date");
+        targetDate = getTargetDateFromIntent();
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        // [수정] 2. 헤더 텍스트 갱신 함수 호출
         updateHeaderTitle();
 
         tvTotalExercise = findViewById(R.id.tv_total_exercise);
@@ -79,6 +102,10 @@ public class ExerciseActivity extends BaseHealthActivity {
         spinnerExerciseType = findViewById(R.id.spinner_exercise_type);
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
+        
+        btnAdd1 = findViewById(R.id.btn_add_1);
+        btnAdd10 = findViewById(R.id.btn_add_10);
+        btnAdd30 = findViewById(R.id.btn_add_30);
 
         apiService = SupabaseClient.getApi(this);
 
@@ -96,41 +123,34 @@ public class ExerciseActivity extends BaseHealthActivity {
         });
         lvTodayRecords.setAdapter(adapter);
 
-        // 버튼: +1분, +10분, +30분
-        findViewById(R.id.btn_add_1).setOnClickListener(v -> addTime(1));
-        findViewById(R.id.btn_add_10).setOnClickListener(v -> addTime(10));
-        findViewById(R.id.btn_add_30).setOnClickListener(v -> addTime(30));
-        
         findViewById(R.id.btn_reset).setOnClickListener(v -> resetUI());
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
 
         setupGoalClickListeners();
     }
 	
-	private void setupGoalClickListeners() {
-    // ✅ 클릭 효과 활성화
-    tvGoal.setClickable(true);
-    tvGoal.setFocusable(true);
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
-            new int[]{android.R.attr.selectableItemBackground});
-        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
-        ta.recycle();
+    private void setupGoalClickListeners() {
+        tvGoal.setClickable(true);
+        tvGoal.setFocusable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
+            tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+            ta.recycle();
+        }
+        
+        tvGoal.setOnClickListener(v -> {
+            Toast.makeText(this, 
+                "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
+                Toast.LENGTH_SHORT).show();
+        });
+        
+        tvGoal.setOnLongClickListener(v -> {
+            startActivity(new Intent(ExerciseActivity.this, ExerciseTargetActivity.class));
+            return true;
+        });
     }
-    
-    tvGoal.setOnClickListener(v -> {
-        Toast.makeText(this, 
-            "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
-            Toast.LENGTH_SHORT).show();
-    });
-    
-    tvGoal.setOnLongClickListener(v -> {
-        startActivity(new Intent(ExerciseActivity.this, ExerciseTargetActivity.class));
-        return true;
-    });
-}
 	
-	    // [추가] 액티비티 재사용 시 날짜 갱신
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -141,11 +161,10 @@ public class ExerciseActivity extends BaseHealthActivity {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        updateHeaderTitle(); // 헤더 갱신
-        fetchTodayRecords(); // 데이터 다시 조회
+        updateHeaderTitle();
+        fetchTodayRecords();
     }
 
-    // [추가] 헤더 텍스트 변경 로직 (오늘 vs yyyy년 mm월 dd일)
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
@@ -166,22 +185,42 @@ public class ExerciseActivity extends BaseHealthActivity {
         }
     }
 
-
     @Override
     protected void onResume() {
         super.onResume();
-        fetchExerciseTypes(); // 운동 종류 목록 갱신
+        fetchExerciseTypes(); // 운동 종류 목록 갱신 + 정렬 + 자동 선택
         fetchTodayRecords();  // 기록 목록 갱신
-        updateGoalUI();       // 목표 텍스트 갱신 (설정화면에서 돌아왔을 때 반영)
+        updateGoalUI();       
     }
 
+    // [수정] 목표 텍스트에 10,000보 추가
     private void updateGoalUI() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int targetMinutes = prefs.getInt("exercise_target", 30); // 기본값 30분
+        int targetMinutes = prefs.getInt("exercise_target", 30); 
         
-        // 예: "목표: 30분 이상"
-        String text = String.format(Locale.KOREA, "목표: %d분 이상 ⓘ", targetMinutes);
+        String text = String.format(Locale.KOREA, "목표: %d분 또는 10,000보 이상 ⓘ", targetMinutes);
         tvGoal.setText(text);
+    }
+
+    // [추가] 선택된 종류에 따라 UI(버튼 및 힌트) 동적 업데이트
+    private void updateUIForSelectedType(String type) {
+        if ("걸음수".equals(type)) {
+            btnAdd1.setText("+10보");
+            btnAdd10.setText("+100보");
+            btnAdd30.setText("+500보");
+            btnAdd1.setOnClickListener(v -> addTime(10));
+            btnAdd10.setOnClickListener(v -> addTime(100));
+            btnAdd30.setOnClickListener(v -> addTime(500));
+            etInput.setHint("걸음수 입력");
+        } else {
+            btnAdd1.setText("+1분");
+            btnAdd10.setText("+10분");
+            btnAdd30.setText("+30분");
+            btnAdd1.setOnClickListener(v -> addTime(1));
+            btnAdd10.setOnClickListener(v -> addTime(10));
+            btnAdd30.setOnClickListener(v -> addTime(30));
+            etInput.setHint("시간(분) 입력");
+        }
     }
 
     private void setupSpinnerWithLongClick() {
@@ -192,13 +231,16 @@ public class ExerciseActivity extends BaseHealthActivity {
         spinnerExerciseType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (!exerciseTypeList.isEmpty()) selectedType = exerciseTypeList.get(position).getName();
+                if (!exerciseTypeList.isEmpty()) {
+                    selectedType = exerciseTypeList.get(position).getName();
+                    updateUIForSelectedType(selectedType); // 선택 시 UI 즉각 업데이트
+                }
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        // [핵심] 길게 누르면 "운동 종류 관리" 화면으로 이동
+        // 관리 화면으로 이동
         spinnerExerciseType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -208,25 +250,45 @@ public class ExerciseActivity extends BaseHealthActivity {
                     vibrator.vibrate(100);
                 }
             }
-            startActivity(new Intent(ExerciseActivity.this, ExerciseTypeActivity.class));
+            Intent intent = new Intent(ExerciseActivity.this, ExerciseTypeActivity.class);
+            exerciseTypeLauncher.launch(intent);
             return true;
         });
     }
 
     private void fetchExerciseTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+		if (!checkNetworkAndProceed()) {
+            return;
+        }
         apiService.getExerciseTypes().enqueue(new Callback<List<ExerciseType>>() {
             @Override
             public void onResponse(Call<List<ExerciseType>> call, Response<List<ExerciseType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     exerciseTypeList.clear();
-                    exerciseTypeList.addAll(response.body());
+                    List<ExerciseType> fetched = response.body();
+
+                    // 최신순 정렬
+                    Collections.sort(fetched, new Comparator<ExerciseType>() {
+                        @Override
+                        public int compare(ExerciseType o1, ExerciseType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    exerciseTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
 
-                    // 목록이 있으면 적절한 항목 선택
-                    if (!exerciseTypeList.isEmpty()) {
+                    // 자동 선택 처리
+                    if (pendingExerciseSelection != null) {
+                        for (int i = 0; i < exerciseTypeList.size(); i++) {
+                            if (exerciseTypeList.get(i).getName().equals(pendingExerciseSelection)) {
+                                spinnerExerciseType.setSelection(i);
+                                selectedType = pendingExerciseSelection;
+                                break;
+                            }
+                        }
+                        pendingExerciseSelection = null;
+                    } else if (!exerciseTypeList.isEmpty()) {
                         boolean found = false;
                         for (int i = 0; i < exerciseTypeList.size(); i++) {
                             if (exerciseTypeList.get(i).getName().equals(selectedType)) {
@@ -242,6 +304,7 @@ public class ExerciseActivity extends BaseHealthActivity {
                     } else {
                         selectedType = "";
                     }
+                    updateUIForSelectedType(selectedType); // 목록 로드 후 UI 확실히 업데이트
                 }
             }
             @Override
@@ -282,9 +345,9 @@ public class ExerciseActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int minutes) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+		if (!checkNetworkAndProceed()) { 
+            return;
+        }
        ExerciseLog newLog = new ExerciseLog(targetDate, selectedType, minutes, currentUserId);
         
         apiService.insertExercise(newLog).enqueue(new Callback<Void>() {
@@ -330,11 +393,24 @@ public class ExerciseActivity extends BaseHealthActivity {
                 if (response.isSuccessful() && response.body() != null) {
                     logDataList.clear();
                     int totalMinutes = 0;
+                    int totalSteps = 0;
+                    
                     for (ExerciseLog log : response.body()) {
-                        totalMinutes += log.getMinutes();
+                        if ("걸음수".equals(log.getExerciseType())) {
+                            totalSteps += log.getMinutes();
+                        } else {
+                            totalMinutes += log.getMinutes();
+                        }
                         logDataList.add(log);
                     }
-                    tvTotalExercise.setText(String.format("%,d", totalMinutes));
+                    
+                    // 총합 표시는 일반 운동과 걸음수를 같이 보여줄 수 있게 처리 (예: "30분 / 10,000보")
+                    if (totalSteps > 0) {
+                        tvTotalExercise.setText(String.format("%,d분 / %,d보", totalMinutes, totalSteps));
+                    } else {
+                        tvTotalExercise.setText(String.format("%,d", totalMinutes));
+                    }
+                    
                     adapter.notifyDataSetChanged();
                 }
             }
@@ -378,7 +454,7 @@ public class ExerciseActivity extends BaseHealthActivity {
         etInput.setText(String.valueOf(newVal));
     }
 
-    // [Adapter] 초록색(Green) 테마 적용
+    // [Adapter] 초록색(Green) 테마 적용 및 '걸음수' 예외처리
     private static class ExerciseAdapter extends ArrayAdapter<ExerciseLog> {
         private Context context;
         private List<ExerciseLog> logs;
@@ -400,7 +476,6 @@ public class ExerciseActivity extends BaseHealthActivity {
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
             if (convertView == null) {
-                // 레이아웃 파일은 기존과 공유하거나 복사해서 사용 (item_protein_record 등)
                 convertView = LayoutInflater.from(context).inflate(R.layout.item_protein_record, parent, false);
             }
 
@@ -416,11 +491,16 @@ public class ExerciseActivity extends BaseHealthActivity {
             if (colorBar != null) colorBar.setBackgroundColor(greenColor);
             
             if (tvAmount != null) {
-                tvAmount.setText(String.valueOf(log.getMinutes()));
+                tvAmount.setText(String.format("%,d", log.getMinutes()));
                 tvAmount.setTextColor(greenColor);
             }
             if (tvUnit != null) {
-                tvUnit.setText("분");
+                // [수정] 걸음수면 "보", 아니면 "분"
+                if ("걸음수".equals(log.getExerciseType())) {
+                    tvUnit.setText("보");
+                } else {
+                    tvUnit.setText("분");
+                }
                 tvUnit.setTextColor(greenColor);
             }
             if (tvName != null) {

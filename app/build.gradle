@@ -26,7 +26,7 @@ android {
 }
 
 dependencies {
-    // [수정] 중복 제거 - 각 라이브러리를 한 번씩만 선언
+    // [기존 유지]
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     
     // AndroidX 라이브러리
@@ -34,7 +34,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     implementation 'com.google.android.material:material:1.3.0'
     
-    // Retrofit & Gson (서버 통신용)
+    // Retrofit & Gson
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     
@@ -42,8 +42,14 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
-}
 
+    // [수정] 1.8.0은 너무 최신이라 충돌남 -> 1.2.4로 변경 
+    // (이 버전도 ActivityResultLauncher 기능을 지원하며, API 29 환경에서 충돌 없이 잘 돕니다)
+    implementation 'androidx.activity:activity:1.2.4' 
+    
+    // [추가 권장] ActivityResultLauncher를 안정적으로 쓰기 위해 Fragment 라이브러리도 버전을 맞춰줍니다.
+    implementation 'androidx.fragment:fragment:1.3.6'
+}
 
 
 

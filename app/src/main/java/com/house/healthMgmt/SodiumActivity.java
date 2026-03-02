@@ -19,13 +19,17 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -44,33 +48,47 @@ public class SodiumActivity extends BaseHealthActivity {
     private ListView lvTodayRecords;
     private Button btnConfirm;
 
-    private SupabaseApi apiService;
     private List<SodiumLog> logDataList = new ArrayList<>();
-    private SodiumAdapter adapter; 
+    private SodiumAdapter adapter;
 
     private String selectedFood = "";
     private Long editingLogId = null;
 
+    // 선택 화면에서 돌아왔을 때, 선택해야 할 음식을 잠시 기억하는 변수
+    private String pendingFoodSelection = null;
+
     private List<FoodType> foodTypeList = new ArrayList<>();
     private ArrayAdapter<FoodType> spinnerAdapter;
 
-    // [추가] 날짜 저장 변수
-    private String targetDate; 
+    private static final SimpleDateFormat DATE_FORMAT =
+            new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+    private static final SimpleDateFormat DATE_FORMAT_DISPLAY =
+            new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+
+    // 음식 관리 화면 결과 처리 런처
+    private final ActivityResultLauncher<Intent> foodActivityLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_food");
+                    if (selectedName != null) {
+                        this.pendingFoodSelection = selectedName;
+                        this.selectedFood = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sodium);
-		
-		initializeUserId(); // ✅ 추가
 
-        // [수정] 1. Intent에서 날짜 받기 (가장 먼저 실행)
-        targetDate = getTargetDateFromIntent(); // ("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
-        }
+        initializeUserId();
 
-        // [수정] 2. 헤더 텍스트 업데이트 (오늘/날짜 구분)
+        targetDate = getTargetDateFromIntent();
+        apiService = SupabaseClient.getApi(this);
+
         updateHeaderTitle();
 
         tvTotalSodium = findViewById(R.id.tv_total_sodium);
@@ -79,15 +97,15 @@ public class SodiumActivity extends BaseHealthActivity {
         lvTodayRecords = findViewById(R.id.lv_today_records);
         btnConfirm = findViewById(R.id.btn_confirm_add);
 
-        apiService = SupabaseClient.getApi(this);
-
         setupSpinnerWithLongClick();
 
+        // 어댑터 설정
         adapter = new SodiumAdapter(this, logDataList, new SodiumAdapter.OnRecordActionListener() {
             @Override
             public void onEdit(SodiumLog log) {
                 loadRecordForEdit(log);
             }
+
             @Override
             public void onDelete(SodiumLog log) {
                 showDeleteConfirmDialog(log);
@@ -102,36 +120,28 @@ public class SodiumActivity extends BaseHealthActivity {
         btnConfirm.setOnClickListener(v -> handleConfirmClick());
     }
 
-    // [추가] 액티비티 재사용 시 날짜 및 데이터 갱신
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent);
-        
-        targetDate = intent.getStringExtra("target_date");
-        if (targetDate == null) {
-            targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        if (intent != null) {
+            setIntent(intent);
+            targetDate = getTargetDateFromIntent();
+            updateHeaderTitle();
+            fetchTodayRecords();
         }
-
-        // 날짜가 바뀌었으니 헤더와 목록 갱신
-        updateHeaderTitle();
-        fetchTodayRecords();
     }
 
-    // [추가] 헤더 텍스트 설정 로직 (오늘의 기록 vs yyyy년 mm월 dd일의 기록)
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
-            String todayStr = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+            String todayStr = DATE_FORMAT.format(new Date());
 
             if (targetDate.equals(todayStr)) {
                 tvHeader.setText("오늘의 기록");
             } else {
                 try {
-                    SimpleDateFormat sdfInput = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-                    SimpleDateFormat sdfOutput = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
-                    Date date = sdfInput.parse(targetDate);
-                    tvHeader.setText(sdfOutput.format(date) + "의 기록");
+                    Date date = DATE_FORMAT.parse(targetDate);
+                    tvHeader.setText(DATE_FORMAT_DISPLAY.format(date) + "의 기록");
                 } catch (Exception e) {
                     tvHeader.setText(targetDate + "의 기록");
                 }
@@ -142,7 +152,7 @@ public class SodiumActivity extends BaseHealthActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        fetchFoodTypes();
+        fetchFoodTypes(); // 목록 갱신 + 자동 선택 + 정렬 수행
         fetchTodayRecords();
     }
 
@@ -156,8 +166,10 @@ public class SodiumActivity extends BaseHealthActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (!foodTypeList.isEmpty()) selectedFood = foodTypeList.get(position).getName();
             }
+
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
 
         spinnerFoodType.setOnLongClickListener(v -> {
@@ -169,48 +181,85 @@ public class SodiumActivity extends BaseHealthActivity {
                     vibrator.vibrate(100);
                 }
             }
-            startActivity(new Intent(SodiumActivity.this, FoodActivity.class));
+            Intent intent = new Intent(SodiumActivity.this, FoodActivity.class);
+            foodActivityLauncher.launch(intent);
             return true;
         });
     }
 
     private void fetchFoodTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+        if (!checkNetworkAndProceed()) {
+            return;
+        }
         apiService.getFoodTypes().enqueue(new Callback<List<FoodType>>() {
             @Override
             public void onResponse(Call<List<FoodType>> call, Response<List<FoodType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     foodTypeList.clear();
-                    foodTypeList.addAll(response.body());
+                    
+                    List<FoodType> fetchedList = response.body();
+
+                    // ID 기준 내림차순 정렬 (최신순)
+                    Collections.sort(fetchedList, new Comparator<FoodType>() {
+                        @Override
+                        public int compare(FoodType o1, FoodType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    foodTypeList.addAll(fetchedList);
                     spinnerAdapter.notifyDataSetChanged();
-                    if (!foodTypeList.isEmpty()) selectedFood = foodTypeList.get(0).getName();
+
+                    // 선택 화면에서 받아온 값이 있으면 자동 선택
+                    if (pendingFoodSelection != null) {
+                        for (int i = 0; i < foodTypeList.size(); i++) {
+                            if (foodTypeList.get(i).getName().equals(pendingFoodSelection)) {
+                                spinnerFoodType.setSelection(i);
+                                selectedFood = pendingFoodSelection;
+                                break;
+                            }
+                        }
+                        pendingFoodSelection = null;
+                    } else if (!foodTypeList.isEmpty()) {
+                        boolean currentSelectionExists = false;
+                        for (int i = 0; i < foodTypeList.size(); i++) {
+                            if (foodTypeList.get(i).getName().equals(selectedFood)) {
+                                spinnerFoodType.setSelection(i);
+                                currentSelectionExists = true;
+                                break;
+                            }
+                        }
+                        if (!currentSelectionExists) {
+                            spinnerFoodType.setSelection(0);
+                            selectedFood = foodTypeList.get(0).getName();
+                        }
+                    }
                 }
             }
+
             @Override
-            public void onFailure(Call<List<FoodType>> call, Throwable t) {}
+            public void onFailure(Call<List<FoodType>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
     private void handleConfirmClick() {
         String inputStr = etInput.getText().toString();
         if (inputStr.isEmpty()) return;
-        
+
         try {
             int amount = Integer.parseInt(inputStr.replace(",", ""));
-            
             if (editingLogId == null) saveRecordToServer(amount);
             else updateRecordToServer(editingLogId, amount);
         } catch (NumberFormatException e) {
-            Toast.makeText(this, "숫자만 입력 가능합니다.", Toast.LENGTH_SHORT).show();
+            showError("숫자만 입력 가능합니다.");
         }
     }
 
     private void loadRecordForEdit(SodiumLog log) {
         editingLogId = log.getId();
         etInput.setText(String.format("%,d", log.getSodiumAmount()));
-        
         for (int i = 0; i < foodTypeList.size(); i++) {
             if (foodTypeList.get(i).getName().equals(log.getFoodType())) {
                 spinnerFoodType.setSelection(i);
@@ -228,11 +277,11 @@ public class SodiumActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int amount) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
-        // [수정] targetDate 사용
+        if (!checkNetworkAndProceed()) {
+            return;
+        }
         SodiumLog newLog = new SodiumLog(targetDate, selectedFood, amount, currentUserId);
+
         apiService.insertSodium(newLog).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -240,11 +289,14 @@ public class SodiumActivity extends BaseHealthActivity {
                     showSuccess("저장됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("저장 실패");
                 }
             }
+
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
-                showError("저장 실패");
+                handleApiFailure(t);
             }
         });
     }
@@ -261,15 +313,19 @@ public class SodiumActivity extends BaseHealthActivity {
                     showSuccess("수정됨");
                     resetUI();
                     fetchTodayRecords();
+                } else {
+                    showError("수정 실패");
                 }
             }
+
             @Override
-            public void onFailure(Call<Void> call, Throwable t) {}
+            public void onFailure(Call<Void> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
     private void fetchTodayRecords() {
-        // [수정] targetDate 사용
         String query = "eq." + targetDate;
         apiService.getTodaySodiumLogs(query).enqueue(new Callback<List<SodiumLog>>() {
             @Override
@@ -283,10 +339,15 @@ public class SodiumActivity extends BaseHealthActivity {
                     }
                     tvTotalSodium.setText(String.format("%,d", totalSum));
                     adapter.notifyDataSetChanged();
+                } else {
+                    showError("기록을 불러올 수 없습니다.");
                 }
             }
+
             @Override
-            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {}
+            public void onFailure(Call<List<SodiumLog>> call, Throwable t) {
+                handleApiFailure(t);
+            }
         });
     }
 
@@ -303,10 +364,18 @@ public class SodiumActivity extends BaseHealthActivity {
             apiService.deleteSodium("eq." + log.getId()).enqueue(new Callback<Void>() {
                 @Override
                 public void onResponse(Call<Void> call, Response<Void> response) {
-                    if (response.isSuccessful()) fetchTodayRecords();
+                    if (response.isSuccessful()) {
+                        showSuccess("삭제됨");
+                        fetchTodayRecords();
+                    } else {
+                        showError("삭제 실패");
+                    }
                 }
+
                 @Override
-                public void onFailure(Call<Void> call, Throwable t) {}
+                public void onFailure(Call<Void> call, Throwable t) {
+                    handleApiFailure(t);
+                }
             });
             dialog.dismiss();
         });
@@ -317,18 +386,20 @@ public class SodiumActivity extends BaseHealthActivity {
     private void addAmountToInput(int amount) {
         String currentText = etInput.getText().toString();
         currentText = currentText.replace(",", "");
-        
+
         int currentVal = 0;
-        try { 
+        try {
             if (!currentText.isEmpty()) {
-                currentVal = Integer.parseInt(currentText); 
+                currentVal = Integer.parseInt(currentText);
             }
-        } catch (Exception e) {}
-        
+        } catch (Exception e) {
+        }
+
         int newVal = currentVal + amount;
         etInput.setText(String.format("%,d", newVal));
     }
 
+    // [중요] 누락되었던 Adapter 클래스 정의
     private static class SodiumAdapter extends ArrayAdapter<SodiumLog> {
         private Context context;
         private List<SodiumLog> logs;
@@ -350,6 +421,7 @@ public class SodiumActivity extends BaseHealthActivity {
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
             if (convertView == null) {
+                // 단백질과 동일한 레이아웃 재사용 (없으면 item_sodium_record 등을 만들어야 함)
                 convertView = LayoutInflater.from(context).inflate(R.layout.item_protein_record, parent, false);
             }
 
@@ -360,10 +432,11 @@ public class SodiumActivity extends BaseHealthActivity {
             TextView tvUnit = convertView.findViewById(R.id.tv_unit);
             View colorBar = convertView.findViewById(R.id.v_color_bar);
 
+            // 나트륨 색상 (#FFB300)
             int orangeColor = Color.parseColor("#FFB300");
 
             if (colorBar != null) colorBar.setBackgroundColor(orangeColor);
-            
+
             if (tvAmount != null) {
                 tvAmount.setText(String.format("%,d", log.getSodiumAmount()));
                 tvAmount.setTextColor(orangeColor);

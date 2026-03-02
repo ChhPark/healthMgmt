@@ -20,13 +20,16 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -40,7 +43,7 @@ import retrofit2.Response;
 public class SleepActivity extends BaseHealthActivity {
 
     private TextView tvTotalSleep;
-    private TextView tvGoal; // [추가] 목표 텍스트 뷰
+    private TextView tvGoal;
     private EditText etInput;
     private Spinner spinnerSleepType;
     private ListView lvTodayRecords;
@@ -52,28 +55,44 @@ public class SleepActivity extends BaseHealthActivity {
 
     private String selectedType = "";
     private Long editingLogId = null;
-	private String targetDate;
+    private String targetDate;
+
+    // [자동 선택] 선택 후 돌아왔을 때 값을 기억하는 변수
+    private String pendingSleepSelection = null;
 
     private List<SleepType> sleepTypeList = new ArrayList<>();
     private ArrayAdapter<SleepType> spinnerAdapter;
+
+    // [Launcher] 관리 화면 결과 처리
+    private final ActivityResultLauncher<Intent> sleepTypeLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_sleep_type");
+                    if (selectedName != null) {
+                        this.pendingSleepSelection = selectedName;
+                        this.selectedType = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sleep);
 		
-		initializeUserId(); // ✅ 추가
+		initializeUserId(); 
 		
-		targetDate = getTargetDateFromIntent(); // ("target_date");
+		targetDate = getTargetDateFromIntent(); 
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        // [수정] 2. 헤더 텍스트 갱신 함수 호출
         updateHeaderTitle();
 
         tvTotalSleep = findViewById(R.id.tv_total_sleep);
-        tvGoal = findViewById(R.id.tv_goal); // [연결]
+        tvGoal = findViewById(R.id.tv_goal);
         etInput = findViewById(R.id.et_sleep_input);
         spinnerSleepType = findViewById(R.id.spinner_sleep_type);
         lvTodayRecords = findViewById(R.id.lv_today_records);
@@ -95,7 +114,6 @@ public class SleepActivity extends BaseHealthActivity {
         });
         lvTodayRecords.setAdapter(adapter);
 
-        // 빠른 시간 추가 버튼
         findViewById(R.id.btn_add_10).setOnClickListener(v -> addTime(10));
         findViewById(R.id.btn_add_30).setOnClickListener(v -> addTime(30));
         findViewById(R.id.btn_add_60).setOnClickListener(v -> addTime(60));
@@ -107,29 +125,27 @@ public class SleepActivity extends BaseHealthActivity {
     }
 	
 	private void setupGoalClickListeners() {
-    // ✅ 클릭 효과 활성화
-    tvGoal.setClickable(true);
-    tvGoal.setFocusable(true);
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
-            new int[]{android.R.attr.selectableItemBackground});
-        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
-        ta.recycle();
+        tvGoal.setClickable(true);
+        tvGoal.setFocusable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
+            tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+            ta.recycle();
+        }
+        
+        tvGoal.setOnClickListener(v -> {
+            Toast.makeText(this, 
+                "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
+                Toast.LENGTH_SHORT).show();
+        });
+        
+        tvGoal.setOnLongClickListener(v -> {
+            startActivity(new Intent(SleepActivity.this, SleepTargetActivity.class));
+            return true;
+        });
     }
-    
-    tvGoal.setOnClickListener(v -> {
-        Toast.makeText(this, 
-            "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
-            Toast.LENGTH_SHORT).show();
-    });
-    
-    tvGoal.setOnLongClickListener(v -> {
-        startActivity(new Intent(SleepActivity.this, SleepTargetActivity.class));
-        return true;
-    });
-}
 	
-	    // [추가] 액티비티 재사용 시 날짜 갱신
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -140,11 +156,10 @@ public class SleepActivity extends BaseHealthActivity {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
 
-        updateHeaderTitle(); // 헤더 갱신
-        fetchTodayRecords(); // 데이터 다시 조회
+        updateHeaderTitle();
+        fetchTodayRecords();
     }
 
-    // [추가] 헤더 텍스트 변경 로직 (오늘 vs yyyy년 mm월 dd일)
     private void updateHeaderTitle() {
         TextView tvHeader = findViewById(R.id.tv_record_header);
         if (tvHeader != null) {
@@ -171,16 +186,14 @@ public class SleepActivity extends BaseHealthActivity {
         super.onResume();
         fetchSleepTypes();
         fetchTodayRecords();
-        updateGoalUI(); // [추가] 화면 돌아올 때 목표 텍스트 갱신
+        updateGoalUI();
     }
 
-    // 목표 텍스트 갱신 메서드
     private void updateGoalUI() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
-        int targetMinutes = prefs.getInt("sleep_target", 420); // 기본값 420분 (7시간)
+        int targetMinutes = prefs.getInt("sleep_target", 420);
         double hours = targetMinutes / 60.0;
         
-        // 예: "목표: 420분 (7시간) 이상"
         String text;
         if (targetMinutes % 60 == 0) {
             text = String.format(Locale.KOREA, "목표: %d분 (%d시간) 이상 ⓘ", targetMinutes, (int)hours);
@@ -204,6 +217,7 @@ public class SleepActivity extends BaseHealthActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
+        // [수정] Launcher 사용하여 관리 화면 이동
         spinnerSleepType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -213,24 +227,46 @@ public class SleepActivity extends BaseHealthActivity {
                     vibrator.vibrate(100);
                 }
             }
-            startActivity(new Intent(SleepActivity.this, SleepTypeActivity.class));
+            Intent intent = new Intent(SleepActivity.this, SleepTypeActivity.class);
+            sleepTypeLauncher.launch(intent);
             return true;
         });
     }
 
+    // [정렬 및 자동 선택 로직]
     private void fetchSleepTypes() {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+		if (!checkNetworkAndProceed()) {
+            return;
+        }
         apiService.getSleepTypes().enqueue(new Callback<List<SleepType>>() {
             @Override
             public void onResponse(Call<List<SleepType>> call, Response<List<SleepType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     sleepTypeList.clear();
-                    sleepTypeList.addAll(response.body());
+                    List<SleepType> fetched = response.body();
+
+                    // 최신순 정렬
+                    Collections.sort(fetched, new Comparator<SleepType>() {
+                        @Override
+                        public int compare(SleepType o1, SleepType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    sleepTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
 
-                    if (!sleepTypeList.isEmpty()) {
+                    // 자동 선택 처리
+                    if (pendingSleepSelection != null) {
+                        for (int i = 0; i < sleepTypeList.size(); i++) {
+                            if (sleepTypeList.get(i).getName().equals(pendingSleepSelection)) {
+                                spinnerSleepType.setSelection(i);
+                                selectedType = pendingSleepSelection;
+                                break;
+                            }
+                        }
+                        pendingSleepSelection = null;
+                    } else if (!sleepTypeList.isEmpty()) {
                         boolean found = false;
                         for (int i = 0; i < sleepTypeList.size(); i++) {
                             if (sleepTypeList.get(i).getName().equals(selectedType)) {
@@ -286,9 +322,9 @@ public class SleepActivity extends BaseHealthActivity {
     }
 
     private void saveRecordToServer(int minutes) {
-		if (!checkNetworkAndProceed()) { // ✅ 추가
-        return;
-    }
+		if (!checkNetworkAndProceed()) {
+            return;
+        }
         SleepLog newLog = new SleepLog(targetDate, selectedType, minutes, currentUserId);
         
         apiService.insertSleep(newLog).enqueue(new Callback<Void>() {

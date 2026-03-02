@@ -1,9 +1,12 @@
 package com.house.healthMgmt;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,8 +20,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -29,7 +36,11 @@ public class BeverageTypeActivity extends AppCompatActivity {
     private Button btnAdd;
     private ListView lvList;
     private SupabaseApi apiService;
-    private List<BeverageType> typeList = new ArrayList<>();
+
+    // [검색/정렬] 리스트 분리
+    private List<BeverageType> originalList = new ArrayList<>();
+    private List<BeverageType> filteredList = new ArrayList<>();
+    
     private TypeAdapter adapter;
 
     @Override
@@ -42,11 +53,40 @@ public class BeverageTypeActivity extends AppCompatActivity {
         lvList = findViewById(R.id.lv_type_list);
         apiService = SupabaseClient.getApi(this);
 
-        adapter = new TypeAdapter(this, typeList);
+        adapter = new TypeAdapter(this, filteredList);
         lvList.setAdapter(adapter);
 
         btnAdd.setOnClickListener(v -> addType());
+
+        // [추가] 실시간 검색 기능
+        etName.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterList(s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
         fetchTypes();
+    }
+
+    private void filterList(String text) {
+        filteredList.clear();
+        if (text.isEmpty()) {
+            filteredList.addAll(originalList);
+        } else {
+            for (BeverageType item : originalList) {
+                if (item.getName().contains(text)) {
+                    filteredList.add(item);
+                }
+            }
+        }
+        adapter.notifyDataSetChanged();
     }
 
     private void fetchTypes() {
@@ -54,9 +94,19 @@ public class BeverageTypeActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<List<BeverageType>> call, Response<List<BeverageType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    typeList.clear();
-                    typeList.addAll(response.body());
-                    adapter.notifyDataSetChanged();
+                    originalList.clear();
+                    List<BeverageType> fetched = response.body();
+
+                    // [정렬] ID 역순 (최신순)
+                    Collections.sort(fetched, new Comparator<BeverageType>() {
+                        @Override
+                        public int compare(BeverageType o1, BeverageType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    originalList.addAll(fetched);
+                    filterList(etName.getText().toString());
                 }
             }
             @Override
@@ -68,6 +118,14 @@ public class BeverageTypeActivity extends AppCompatActivity {
         String name = etName.getText().toString().trim();
         if (name.isEmpty()) return;
 
+        // [중복 체크]
+        for (BeverageType type : originalList) {
+            if (type.getName().equals(name)) {
+                Toast.makeText(this, "이미 존재하는 종류입니다.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+
         BeverageType newType = new BeverageType(name);
         apiService.insertBeverageType(newType).enqueue(new Callback<Void>() {
             @Override
@@ -75,11 +133,20 @@ public class BeverageTypeActivity extends AppCompatActivity {
                 if (response.isSuccessful()) {
                     etName.setText("");
                     fetchTypes();
+                    Toast.makeText(BeverageTypeActivity.this, "추가됨", Toast.LENGTH_SHORT).show();
                 }
             }
             @Override
             public void onFailure(Call<Void> call, Throwable t) {}
         });
+    }
+
+    // [반환] 선택 후 종료 로직 추가
+    private void returnSelectedType(String name) {
+        Intent intent = new Intent();
+        intent.putExtra("selected_beverage", name);
+        setResult(RESULT_OK, intent);
+        finish();
     }
 
     private void deleteType(BeverageType type) {
@@ -126,6 +193,9 @@ public class BeverageTypeActivity extends AppCompatActivity {
             
             TextView tvName = convertView.findViewById(R.id.tv_name);
             tvName.setText(item.getName());
+
+            // 아이템 클릭 시 선택 반환
+            convertView.setOnClickListener(v -> returnSelectedType(item.getName()));
 
             convertView.findViewById(R.id.iv_delete).setOnClickListener(v -> deleteType(item));
             return convertView;

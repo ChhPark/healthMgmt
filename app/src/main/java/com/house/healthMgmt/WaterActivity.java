@@ -19,12 +19,17 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher; // [추가]
+import androidx.activity.result.contract.ActivityResultContracts; // [추가]
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections; // [추가]
+import java.util.Comparator; // [추가]
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +39,6 @@ import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-import android.widget.Toast;
 
 public class WaterActivity extends BaseHealthActivity {
 
@@ -51,6 +55,9 @@ public class WaterActivity extends BaseHealthActivity {
     private String selectedWater = "";
     private Long editingLogId = null;
 
+    // [추가] 선택 화면에서 돌아왔을 때 선택해야 할 값 임시 저장
+    private String pendingWaterSelection = null;
+
     private List<WaterType> waterTypeList = new ArrayList<>();
     private ArrayAdapter<WaterType> spinnerAdapter;
     
@@ -65,6 +72,20 @@ public class WaterActivity extends BaseHealthActivity {
         new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
     private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
         new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
+
+    // [추가] 물 종류 관리 화면 결과 처리 런처
+    private final ActivityResultLauncher<Intent> waterTypeLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String selectedName = result.getData().getStringExtra("selected_water");
+                    if (selectedName != null) {
+                        this.pendingWaterSelection = selectedName;
+                        this.selectedWater = selectedName;
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,13 +144,13 @@ public class WaterActivity extends BaseHealthActivity {
     
     private void updateUnitButtons() {
         if (isOzMode) {
-            btnToggleUnit.setText("oz");
+            btnToggleUnit.setText("단위: oz");
             btnAdd10.setText("+1oz");
             btnAdd100.setText("+5oz");
             btnAdd500.setText("+10oz");
             etInput.setHint("oz 입력");
         } else {
-            btnToggleUnit.setText("cc");
+            btnToggleUnit.setText("단위: cc");
             btnAdd10.setText("+10cc");
             btnAdd100.setText("+100cc");
             btnAdd500.setText("+500cc");
@@ -138,26 +159,26 @@ public class WaterActivity extends BaseHealthActivity {
     }
     
 	private void setupGoalClickListeners() {
-    tvGoal.setClickable(true);
-    tvGoal.setFocusable(true);
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-        android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
-            new int[]{android.R.attr.selectableItemBackground});
-        tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
-        ta.recycle();
+        tvGoal.setClickable(true);
+        tvGoal.setFocusable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.content.res.TypedArray ta = getTheme().obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
+            tvGoal.setBackgroundResource(ta.getResourceId(0, 0));
+            ta.recycle();
+        }
+        
+        tvGoal.setOnClickListener(v -> {
+            Toast.makeText(this, 
+                "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
+                Toast.LENGTH_SHORT).show();
+        });
+        
+        tvGoal.setOnLongClickListener(v -> {
+            startActivity(new Intent(WaterActivity.this, WaterTargetActivity.class));
+            return true;
+        });
     }
-    
-    tvGoal.setOnClickListener(v -> {
-        Toast.makeText(this, 
-            "💡 목표를 길게 누르면 목표 설정 화면으로 이동합니다", 
-            Toast.LENGTH_SHORT).show();
-    });
-    
-    tvGoal.setOnLongClickListener(v -> {
-        startActivity(new Intent(WaterActivity.this, WaterTargetActivity.class));
-        return true;
-    });
-}
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -193,7 +214,7 @@ public class WaterActivity extends BaseHealthActivity {
     protected void onResume() {
         super.onResume();
         updateGoalText();
-        fetchWaterTypes();
+        fetchWaterTypes(); // [수정] 목록 갱신 + 정렬 + 자동 선택
         fetchTodayRecords();
     }
 
@@ -217,6 +238,7 @@ public class WaterActivity extends BaseHealthActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
+        // [수정] Launcher 사용
         spinnerWaterType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -226,24 +248,48 @@ public class WaterActivity extends BaseHealthActivity {
                     vibrator.vibrate(100);
                 }
             }
-            startActivity(new Intent(WaterActivity.this, WaterTypeActivity.class));
+            Intent intent = new Intent(WaterActivity.this, WaterTypeActivity.class);
+            waterTypeLauncher.launch(intent);
             return true;
         });
     }
 
+    // [수정] 정렬 및 자동 선택 로직 추가
     private void fetchWaterTypes() {
 		if (!checkNetworkAndProceed()) {
-        return;
-    }
+            return;
+        }
         apiService.getWaterTypes().enqueue(new Callback<List<WaterType>>() {
             @Override
             public void onResponse(Call<List<WaterType>> call, Response<List<WaterType>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     waterTypeList.clear();
-                    waterTypeList.addAll(response.body());
+                    List<WaterType> fetched = response.body();
+
+                    // 1. ID 역순(최신순) 정렬
+                    Collections.sort(fetched, new Comparator<WaterType>() {
+                        @Override
+                        public int compare(WaterType o1, WaterType o2) {
+                            return Long.compare(o2.getId(), o1.getId());
+                        }
+                    });
+
+                    waterTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
 
-                    if (!waterTypeList.isEmpty()) {
+                    // 2. 선택 화면에서 받아온 값이 있으면 자동 선택
+                    if (pendingWaterSelection != null) {
+                        for (int i = 0; i < waterTypeList.size(); i++) {
+                            if (waterTypeList.get(i).getName().equals(pendingWaterSelection)) {
+                                spinnerWaterType.setSelection(i);
+                                selectedWater = pendingWaterSelection;
+                                break;
+                            }
+                        }
+                        pendingWaterSelection = null;
+                    } 
+                    // 3. 기존 선택값 유지 또는 기본값(0번) 선택
+                    else if (!waterTypeList.isEmpty()) {
                         boolean found = false;
                         for (int i = 0; i < waterTypeList.size(); i++) {
                             if (waterTypeList.get(i).getName().equals(selectedWater)) {
@@ -285,7 +331,13 @@ public class WaterActivity extends BaseHealthActivity {
 
     private void loadRecordForEdit(WaterLog log) {
         editingLogId = log.getId();
-        etInput.setText(String.format("%,d", log.getWaterAmount()));
+        int amount = log.getWaterAmount();
+        
+        if (isOzMode) {
+             etInput.setText(String.valueOf((int)Math.round(amount / OZ_TO_CC)));
+        } else {
+             etInput.setText(String.format("%,d", amount));
+        }
         
         for (int i = 0; i < waterTypeList.size(); i++) {
             if (waterTypeList.get(i).getName().equals(log.getWaterType())) {
@@ -305,8 +357,8 @@ public class WaterActivity extends BaseHealthActivity {
 
     private void saveRecordToServer(int amount) {
 		if (!checkNetworkAndProceed()) {
-        return;
-    }
+            return;
+        }
         WaterLog log = new WaterLog(targetDate, selectedWater, amount, currentUserId);
         apiService.insertWater(log).enqueue(new Callback<Void>() {
             @Override
@@ -442,7 +494,6 @@ public class WaterActivity extends BaseHealthActivity {
             this.logs = logs;
             this.listener = listener;
         }
-
         @NonNull
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
@@ -458,35 +509,43 @@ public class WaterActivity extends BaseHealthActivity {
             View colorBar = convertView.findViewById(R.id.v_color_bar);
 
             int blueColor = Color.parseColor("#2196F3");
-
             if (colorBar != null) colorBar.setBackgroundColor(blueColor);
             
             if (tvAmount != null) {
                 int cc = log.getWaterAmount();
-                int oz = (int)Math.round(cc / OZ_TO_CC);
                 
-                if (oz > 0) {
+                // [핵심 로직] CC 값이 1oz(약 29.57) 단위로 나누어 떨어지는지 확인
+                // 오차 범위를 고려하여 판단 (oz로 입력했다면 oz값에 가깝게 계산됨)
+                double ozVal = cc / OZ_TO_CC;
+                boolean isInputByOz = Math.abs(ozVal - Math.round(ozVal)) < 0.1; 
+
+                if (isInputByOz && cc > 0) {
+                    // oz로 입력된 것으로 판단 -> "296cc (10oz)"
+                    int oz = (int)Math.round(ozVal);
                     tvAmount.setText(String.format("%,dcc (%doz)", cc, oz));
+                    if (tvUnit != null) tvUnit.setText(""); 
                 } else {
+                    // cc로 입력된 것으로 판단 -> "400" + "cc"
                     tvAmount.setText(String.format("%,d", cc));
+                    if (tvUnit != null) tvUnit.setText("cc");
                 }
+                
                 tvAmount.setTextColor(blueColor);
+                if (tvUnit != null) tvUnit.setTextColor(blueColor);
             }
-            if (tvUnit != null) {
-                tvUnit.setText("");
-                tvUnit.setTextColor(blueColor);
-            }
+            
             if (tvName != null) {
                 tvName.setText(log.getWaterType());
             }
 
+            // ... (버튼 이벤트 기존 동일) ...
             View btnEdit = convertView.findViewById(R.id.iv_edit);
             View btnDelete = convertView.findViewById(R.id.iv_delete);
-
             if (btnEdit != null) btnEdit.setOnClickListener(v -> listener.onEdit(log));
             if (btnDelete != null) btnDelete.setOnClickListener(v -> listener.onDelete(log));
 
             return convertView;
         }
+
     }
 }
