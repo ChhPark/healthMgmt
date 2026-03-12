@@ -54,9 +54,8 @@ public class NoAlcoholActivity extends BaseHealthActivity {
 
     private String selectedAlcohol = "";
     private Long editingLogId = null;
-	private String targetDate; 
+    private String targetDate; 
 
-    // [자동 선택] 선택 후 돌아왔을 때 값을 기억하는 변수
     private String pendingAlcoholSelection = null;
 
     private List<AlcoholType> alcoholTypeList = new ArrayList<>();
@@ -69,7 +68,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
     private Button btnAdd100;
     private Button btnAdd500;
 
-    // [Launcher] 결과 처리 런처 추가
     private final ActivityResultLauncher<Intent> alcoholTypeLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -88,9 +86,9 @@ public class NoAlcoholActivity extends BaseHealthActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_no_alcohol);
 		
-		initializeUserId();
+        initializeUserId();
 		
-		targetDate = getTargetDateFromIntent();
+        targetDate = getTargetDateFromIntent();
         if (targetDate == null) {
             targetDate = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
         }
@@ -211,7 +209,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        // [수정] Launcher 사용하여 관리 화면 호출
         spinnerAlcoholType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -227,11 +224,10 @@ public class NoAlcoholActivity extends BaseHealthActivity {
         });
     }
 
-    // [정렬 및 자동 선택 로직 적용]
     private void fetchAlcoholTypes() {
 		if (!checkNetworkAndProceed()) {
-        return;
-    }
+            return;
+        }
         apiService.getAlcoholTypes().enqueue(new Callback<List<AlcoholType>>() {
             @Override
             public void onResponse(Call<List<AlcoholType>> call, Response<List<AlcoholType>> response) {
@@ -239,7 +235,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
                     alcoholTypeList.clear();
                     List<AlcoholType> fetched = response.body();
 
-                    // 최신순 정렬
                     Collections.sort(fetched, new Comparator<AlcoholType>() {
                         @Override
                         public int compare(AlcoholType o1, AlcoholType o2) {
@@ -250,7 +245,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
                     alcoholTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
 
-                    // 자동 선택 처리
                     if (pendingAlcoholSelection != null) {
                         for (int i = 0; i < alcoholTypeList.size(); i++) {
                             if (alcoholTypeList.get(i).getName().equals(pendingAlcoholSelection)) {
@@ -284,8 +278,12 @@ public class NoAlcoholActivity extends BaseHealthActivity {
     }
 
     private void handleConfirmClick() {
-        String inputStr = etInput.getText().toString();
-        if (inputStr.isEmpty()) return;
+        String inputStr = etInput.getText().toString().trim();
+        
+        // [수정] 빈칸인 상태로 추가를 누르면 자동으로 '0'으로 처리 (안 마신 날 편의성)
+        if (inputStr.isEmpty()) {
+            inputStr = "0";
+        }
 
         try {
             int inputValue = Integer.parseInt(inputStr.replace(",", ""));
@@ -319,8 +317,8 @@ public class NoAlcoholActivity extends BaseHealthActivity {
 
     private void saveRecordToServer(int amount) {
 		if (!checkNetworkAndProceed()) {
-        return;
-    }
+            return;
+        }
         AlcoholLog newLog = new AlcoholLog(targetDate, selectedAlcohol, amount, currentUserId);
         apiService.insertAlcohol(newLog).enqueue(new Callback<Void>() {
             @Override
@@ -439,6 +437,7 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             this.logs = logs;
             this.listener = listener;
         }
+
         @NonNull
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
@@ -459,7 +458,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
             if (tvAmount != null) {
                 int cc = log.getAmount();
                 
-                // [핵심 로직] oz 단위 입력 여부 판단
                 double ozVal = cc / OZ_TO_CC;
                 boolean isInputByOz = Math.abs(ozVal - Math.round(ozVal)) < 0.1; 
 
@@ -480,7 +478,6 @@ public class NoAlcoholActivity extends BaseHealthActivity {
                 tvName.setText(log.getAlcoholType());
             }
 
-            // ... (버튼 이벤트 기존 동일) ...
             View btnEdit = convertView.findViewById(R.id.iv_edit);
             View btnDelete = convertView.findViewById(R.id.iv_delete);
             if (btnEdit != null) btnEdit.setOnClickListener(v -> listener.onEdit(log));

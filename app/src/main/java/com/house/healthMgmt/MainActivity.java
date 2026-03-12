@@ -1,7 +1,9 @@
 package com.house.healthMgmt;
 
+import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -9,12 +11,15 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
+
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -37,64 +42,88 @@ public class MainActivity extends AppCompatActivity {
     private String todayDate;
     private Calendar currentCalendar = Calendar.getInstance();
     
-    // ✅ [추가] SimpleDateFormat 재사용
     private static final SimpleDateFormat DATE_FORMAT_QUERY = 
         new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
     private static final SimpleDateFormat DATE_FORMAT_DISPLAY = 
         new SimpleDateFormat("yyyy년 MM월 dd일 EEEE", Locale.KOREA);
 
     @Override
-protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_main);
-    
-    // ✅ 월별 리포트에서 전달받은 날짜 확인
-    Intent intent = getIntent();
-    if (intent != null && intent.hasExtra("target_date")) {
-        String targetDate = intent.getStringExtra("target_date");
-        // 해당 날짜로 캘린더 설정
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
-            Date date = sdf.parse(targetDate);
-            currentCalendar.setTime(date);
-            updateDateDisplay();
-        } catch (Exception e) {
-            // 파싱 실패 시 오늘 날짜 사용
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra("target_date")) {
+            String targetDate = intent.getStringExtra("target_date");
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA);
+                Date date = sdf.parse(targetDate);
+                currentCalendar.setTime(date);
+            } catch (Exception e) {
+            }
         }
+
+        tvDateTitle = findViewById(R.id.tv_date_title);
+        tvProteinValue = findViewById(R.id.tv_protein_value);
+        tvSodiumValue = findViewById(R.id.tv_sodium_value);
+        tvWaterValue = findViewById(R.id.tv_water_value);
+        tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
+        tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
+        tvSleepValue = findViewById(R.id.tv_sleep_value);
+        tvExerciseValue = findViewById(R.id.tv_exercise_value);
+
+        apiService = SupabaseClient.getApi(this);
+
+        updateDateDisplay(); 
+
+        tvDateTitle.setOnLongClickListener(v -> {
+            showDatePicker();
+            return true;
+        });
+
+        setupCardListeners();
+        
+        findViewById(R.id.btn_monthly_report).setOnClickListener(v -> 
+            startActivity(new Intent(MainActivity.this, MonthlyReportActivity.class))
+        );
+
+        // [추가] 뒤로가기 버튼 클릭 시 종료 확인 다이얼로그 표시
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                showExitConfirmationDialog();
+            }
+        });
     }
-
-    // UI 연결
-    tvDateTitle = findViewById(R.id.tv_date_title);
-    tvProteinValue = findViewById(R.id.tv_protein_value);
-    tvSodiumValue = findViewById(R.id.tv_sodium_value);
-    tvWaterValue = findViewById(R.id.tv_water_value);
-    tvNoBeverageValue = findViewById(R.id.tv_no_beverage_value);
-    tvNoAlcoholValue = findViewById(R.id.tv_no_alcohol_value);
-    tvSleepValue = findViewById(R.id.tv_sleep_value);
-    tvExerciseValue = findViewById(R.id.tv_exercise_value);
-
-    apiService = SupabaseClient.getApi(this);
-
-    updateDateDisplay(); 
-
-    tvDateTitle.setOnLongClickListener(v -> {
-        showDatePicker();
-        return true;
-    });
-
-    setupCardListeners();
-    
-    // ✅ 월별 리포트 버튼 (수정됨)
-    findViewById(R.id.btn_monthly_report).setOnClickListener(v -> 
-        startActivity(new Intent(MainActivity.this, MonthlyReportActivity.class))
-    );
-}
 
     @Override
     protected void onResume() {
         super.onResume();
         refreshAllGoals();
     }
+
+        // [수정] 종료 확인 다이얼로그 버튼 색상 변경 적용
+    private void showExitConfirmationDialog() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("앱 종료")
+                .setMessage("정말로 종료하시겠습니까?")
+                .setPositiveButton("종료", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        finishAffinity(); // 앱 완전히 종료
+                    }
+                })
+                .setNegativeButton("취소", null)
+                .create();
+
+        // 다이얼로그를 먼저 show() 해야 버튼 객체에 접근할 수 있습니다.
+        dialog.show();
+
+        // 버튼 글자색 강제 지정 (잘 보이게)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.parseColor("#4CAF50")); // 종료 (초록색)
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.parseColor("#78909C")); // 취소 (회색)
+    }
+
 
     private void setupCardListeners() {
         findViewById(R.id.card_protein).setOnClickListener(v -> navigateTo(ProteinActivity.class));
@@ -124,19 +153,24 @@ protected void onCreate(Bundle savedInstanceState) {
             currentCalendar.get(Calendar.MONTH),
             currentCalendar.get(Calendar.DAY_OF_MONTH)
         );
+        
+        // 다이얼로그를 먼저 show() 해야 버튼 객체에 접근할 수 있습니다.
         datePickerDialog.show();
+
+        // [수정] 확인/취소 버튼 글자색을 명시적으로 변경하여 잘 보이게 설정
+        datePickerDialog.getButton(DatePickerDialog.BUTTON_POSITIVE).setTextColor(Color.parseColor("#4CAF50")); // 확인 (초록색)
+        datePickerDialog.getButton(DatePickerDialog.BUTTON_NEGATIVE).setTextColor(Color.parseColor("#78909C")); // 취소 (회색)
     }
 
     private void updateDateDisplay() {
-    String dateText = DATE_FORMAT_DISPLAY.format(currentCalendar.getTime());
-    tvDateTitle.setText(dateText + " 📅"); // ✅ 달력 이모지 추가
-    
-    // ✅ 짧게 클릭하면 힌트 표시
-    tvDateTitle.setOnClickListener(v -> {
-        Toast.makeText(this, 
-            "💡 팁: 날짜를 길게 누르면 달력이 나타납니다!", 
-            Toast.LENGTH_LONG).show();
-    });
+        String dateText = DATE_FORMAT_DISPLAY.format(currentCalendar.getTime());
+        tvDateTitle.setText(dateText + " 📅");
+        
+        tvDateTitle.setOnClickListener(v -> {
+            Toast.makeText(this, 
+                "💡 팁: 날짜를 길게 누르면 달력이 나타납니다!", 
+                Toast.LENGTH_LONG).show();
+        });
         
         String selectedDateStr = DATE_FORMAT_QUERY.format(currentCalendar.getTime());
         this.todayDate = selectedDateStr;
@@ -159,7 +193,6 @@ protected void onCreate(Bundle savedInstanceState) {
         checkExerciseGoal();
     }
 
-    // ✅ [추가] 공통 에러 처리 메서드
     private void showError(String message) {
         runOnUiThread(() -> 
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -180,7 +213,6 @@ protected void onCreate(Bundle savedInstanceState) {
             }
             @Override
             public void onFailure(Call<List<WeightLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Weight Error", t);
                 tvProteinValue.setText("-");
                 showError("체중 데이터를 불러올 수 없습니다.");
@@ -196,19 +228,22 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<ProteinLog>> call, Response<List<ProteinLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalProtein = 0;
-                    for (ProteinLog log : response.body()) {
-                        totalProtein += log.getProteinAmount();
+                    if (response.body().isEmpty()) {
+                        tvProteinValue.setText("-");
+                    } else {
+                        int totalProtein = 0;
+                        for (ProteinLog log : response.body()) {
+                            totalProtein += log.getProteinAmount();
+                        }
+                        boolean isSuccess = totalProtein <= goalLimit; 
+                        tvProteinValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalProtein <= goalLimit; 
-                    tvProteinValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvProteinValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<ProteinLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Protein Error", t);
                 tvProteinValue.setText("-");
             }
@@ -224,19 +259,22 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<SodiumLog>> call, Response<List<SodiumLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalSodium = 0;
-                    for (SodiumLog log : response.body()) {
-                        totalSodium += log.getSodiumAmount();
+                    if (response.body().isEmpty()) {
+                        tvSodiumValue.setText("-");
+                    } else {
+                        int totalSodium = 0;
+                        for (SodiumLog log : response.body()) {
+                            totalSodium += log.getSodiumAmount();
+                        }
+                        boolean isSuccess = totalSodium <= sodiumGoal;
+                        tvSodiumValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalSodium <= sodiumGoal;
-                    tvSodiumValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvSodiumValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<SodiumLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Sodium Error", t);
                 tvSodiumValue.setText("-");
             }
@@ -253,19 +291,22 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<WaterLog>> call, Response<List<WaterLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalWater = 0;
-                    for (WaterLog log : response.body()) {
-                        totalWater += log.getWaterAmount();
+                    if (response.body().isEmpty()) {
+                        tvWaterValue.setText("-");
+                    } else {
+                        int totalWater = 0;
+                        for (WaterLog log : response.body()) {
+                            totalWater += log.getWaterAmount();
+                        }
+                        boolean isSuccess = totalWater >= waterGoal;
+                        tvWaterValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalWater >= waterGoal;
-                    tvWaterValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvWaterValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<WaterLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Water Error", t);
                 tvWaterValue.setText("-");
             }
@@ -279,21 +320,24 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<BeverageLog>> call, Response<List<BeverageLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalBeverage = 0;
-                    for (BeverageLog log : response.body()) {
-                        if (!"디카페인 커피".equals(log.getBeverageType())) {
-                            totalBeverage += log.getAmount();
+                    if (response.body().isEmpty()) {
+                        tvNoBeverageValue.setText("-");
+                    } else {
+                        int totalBeverage = 0;
+                        for (BeverageLog log : response.body()) {
+                            if (!"디카페인 커피".equals(log.getBeverageType())) {
+                                totalBeverage += log.getAmount();
+                            }
                         }
+                        boolean isSuccess = totalBeverage == 0;
+                        tvNoBeverageValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalBeverage == 0;
-                    tvNoBeverageValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvNoBeverageValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<BeverageLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Beverage Error", t);
                 tvNoBeverageValue.setText("-");
             }
@@ -307,19 +351,22 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<AlcoholLog>> call, Response<List<AlcoholLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalAlcohol = 0;
-                    for (AlcoholLog log : response.body()) {
-                        totalAlcohol += log.getAmount();
+                    if (response.body().isEmpty()) {
+                        tvNoAlcoholValue.setText("-");
+                    } else {
+                        int totalAlcohol = 0;
+                        for (AlcoholLog log : response.body()) {
+                            totalAlcohol += log.getAmount();
+                        }
+                        boolean isSuccess = totalAlcohol == 0;
+                        tvNoAlcoholValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalAlcohol == 0;
-                    tvNoAlcoholValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvNoAlcoholValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<AlcoholLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Alcohol Error", t);
                 tvNoAlcoholValue.setText("-");
             }
@@ -336,19 +383,22 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<SleepLog>> call, Response<List<SleepLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalMinutes = 0;
-                    for (SleepLog log : response.body()) {
-                        totalMinutes += log.getMinutes();
+                    if (response.body().isEmpty()) {
+                        tvSleepValue.setText("-");
+                    } else {
+                        int totalMinutes = 0;
+                        for (SleepLog log : response.body()) {
+                            totalMinutes += log.getMinutes();
+                        }
+                        boolean isSuccess = totalMinutes >= sleepGoal;
+                        tvSleepValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalMinutes >= sleepGoal;
-                    tvSleepValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvSleepValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<SleepLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Sleep Error", t);
                 tvSleepValue.setText("-");
             }
@@ -365,19 +415,27 @@ protected void onCreate(Bundle savedInstanceState) {
             @Override
             public void onResponse(Call<List<ExerciseLog>> call, Response<List<ExerciseLog>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    int totalMinutes = 0;
-                    for (ExerciseLog log : response.body()) {
-                        totalMinutes += log.getMinutes();
+                    if (response.body().isEmpty()) {
+                        tvExerciseValue.setText("-");
+                    } else {
+                        int totalMinutes = 0;
+                        int totalSteps = 0;
+                        for (ExerciseLog log : response.body()) {
+                            if ("걸음수".equals(log.getExerciseType())) {
+                                totalSteps += log.getMinutes();
+                            } else {
+                                totalMinutes += log.getMinutes();
+                            }
+                        }
+                        boolean isSuccess = (totalMinutes >= exerciseGoal) || (totalSteps >= 10000);
+                        tvExerciseValue.setText(isSuccess ? "O" : "X");
                     }
-                    boolean isSuccess = totalMinutes >= exerciseGoal;
-                    tvExerciseValue.setText(isSuccess ? "O" : "X");
                 } else {
                     tvExerciseValue.setText("-");
                 }
             }
             @Override
             public void onFailure(Call<List<ExerciseLog>> call, Throwable t) {
-                // ✅ [개선] 에러 처리
                 Log.e(TAG, "Exercise Error", t);
                 tvExerciseValue.setText("-");
             }

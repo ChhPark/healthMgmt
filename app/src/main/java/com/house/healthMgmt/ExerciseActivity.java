@@ -9,6 +9,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+// [추가] 텍스트 크기를 부분적으로 다르게 하기 위한 임포트
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.RelativeSizeSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,7 +53,6 @@ public class ExerciseActivity extends BaseHealthActivity {
     private ListView lvTodayRecords;
     private Button btnConfirm;
 
-    // 빠른 추가 버튼 멤버 변수화 (동적 변경을 위해)
     private Button btnAdd1;
     private Button btnAdd10;
     private Button btnAdd30;
@@ -62,13 +65,11 @@ public class ExerciseActivity extends BaseHealthActivity {
     private Long editingLogId = null;
     private String targetDate;
 
-    // [자동 선택] 선택 후 돌아왔을 때 값을 기억하는 변수
     private String pendingExerciseSelection = null;
 
     private List<ExerciseType> exerciseTypeList = new ArrayList<>();
     private ArrayAdapter<ExerciseType> spinnerAdapter;
 
-    // [Launcher] 관리 화면 결과 처리
     private final ActivityResultLauncher<Intent> exerciseTypeLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -188,12 +189,11 @@ public class ExerciseActivity extends BaseHealthActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        fetchExerciseTypes(); // 운동 종류 목록 갱신 + 정렬 + 자동 선택
-        fetchTodayRecords();  // 기록 목록 갱신
+        fetchExerciseTypes(); 
+        fetchTodayRecords();  
         updateGoalUI();       
     }
 
-    // [수정] 목표 텍스트에 10,000보 추가
     private void updateGoalUI() {
         SharedPreferences prefs = getSharedPreferences("HealthPrefs", Context.MODE_PRIVATE);
         int targetMinutes = prefs.getInt("exercise_target", 30); 
@@ -202,7 +202,6 @@ public class ExerciseActivity extends BaseHealthActivity {
         tvGoal.setText(text);
     }
 
-    // [추가] 선택된 종류에 따라 UI(버튼 및 힌트) 동적 업데이트
     private void updateUIForSelectedType(String type) {
         if ("걸음수".equals(type)) {
             btnAdd1.setText("+10보");
@@ -233,14 +232,13 @@ public class ExerciseActivity extends BaseHealthActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (!exerciseTypeList.isEmpty()) {
                     selectedType = exerciseTypeList.get(position).getName();
-                    updateUIForSelectedType(selectedType); // 선택 시 UI 즉각 업데이트
+                    updateUIForSelectedType(selectedType);
                 }
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        // 관리 화면으로 이동
         spinnerExerciseType.setOnLongClickListener(v -> {
             Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -267,7 +265,6 @@ public class ExerciseActivity extends BaseHealthActivity {
                     exerciseTypeList.clear();
                     List<ExerciseType> fetched = response.body();
 
-                    // 최신순 정렬
                     Collections.sort(fetched, new Comparator<ExerciseType>() {
                         @Override
                         public int compare(ExerciseType o1, ExerciseType o2) {
@@ -278,7 +275,6 @@ public class ExerciseActivity extends BaseHealthActivity {
                     exerciseTypeList.addAll(fetched);
                     spinnerAdapter.notifyDataSetChanged();
 
-                    // 자동 선택 처리
                     if (pendingExerciseSelection != null) {
                         for (int i = 0; i < exerciseTypeList.size(); i++) {
                             if (exerciseTypeList.get(i).getName().equals(pendingExerciseSelection)) {
@@ -304,7 +300,7 @@ public class ExerciseActivity extends BaseHealthActivity {
                     } else {
                         selectedType = "";
                     }
-                    updateUIForSelectedType(selectedType); // 목록 로드 후 UI 확실히 업데이트
+                    updateUIForSelectedType(selectedType); 
                 }
             }
             @Override
@@ -404,12 +400,8 @@ public class ExerciseActivity extends BaseHealthActivity {
                         logDataList.add(log);
                     }
                     
-                    // 총합 표시는 일반 운동과 걸음수를 같이 보여줄 수 있게 처리 (예: "30분 / 10,000보")
-                    if (totalSteps > 0) {
-                        tvTotalExercise.setText(String.format("%,d분 / %,d보", totalMinutes, totalSteps));
-                    } else {
-                        tvTotalExercise.setText(String.format("%,d", totalMinutes));
-                    }
+                    // [수정] SpannableString을 사용하여 단위('분', '보')를 작게 표시합니다.
+                    setTotalExerciseText(totalMinutes, totalSteps);
                     
                     adapter.notifyDataSetChanged();
                 }
@@ -417,6 +409,34 @@ public class ExerciseActivity extends BaseHealthActivity {
             @Override
             public void onFailure(Call<List<ExerciseLog>> call, Throwable t) {}
         });
+    }
+
+    // [추가] 텍스트 크기를 부분적으로 다르게 설정하는 메서드
+    private void setTotalExerciseText(int minutes, int steps) {
+        String text;
+        if (steps > 0 && minutes > 0) {
+            text = String.format(Locale.KOREA, "%,d분 / %,d보", minutes, steps);
+        } else if (steps > 0) {
+            text = String.format(Locale.KOREA, "%,d보", steps);
+        } else {
+            text = String.format(Locale.KOREA, "%,d분", minutes);
+        }
+
+        SpannableString spannable = new SpannableString(text);
+        
+        // "분" 글자 크기를 절반(0.5f = 20sp)으로 줄임
+        int minIndex = text.indexOf("분");
+        if (minIndex != -1) {
+            spannable.setSpan(new RelativeSizeSpan(0.5f), minIndex, minIndex + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        
+        // "보" 글자 크기를 절반(0.5f = 20sp)으로 줄임
+        int stepIndex = text.indexOf("보");
+        if (stepIndex != -1) {
+            spannable.setSpan(new RelativeSizeSpan(0.5f), stepIndex, stepIndex + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        
+        tvTotalExercise.setText(spannable);
     }
 
     private void showDeleteConfirmDialog(ExerciseLog log) {
@@ -454,7 +474,6 @@ public class ExerciseActivity extends BaseHealthActivity {
         etInput.setText(String.valueOf(newVal));
     }
 
-    // [Adapter] 초록색(Green) 테마 적용 및 '걸음수' 예외처리
     private static class ExerciseAdapter extends ArrayAdapter<ExerciseLog> {
         private Context context;
         private List<ExerciseLog> logs;
@@ -486,7 +505,7 @@ public class ExerciseActivity extends BaseHealthActivity {
             TextView tvUnit = convertView.findViewById(R.id.tv_unit);
             View colorBar = convertView.findViewById(R.id.v_color_bar);
 
-            int greenColor = Color.parseColor("#4CAF50"); // 초록색
+            int greenColor = Color.parseColor("#4CAF50"); 
 
             if (colorBar != null) colorBar.setBackgroundColor(greenColor);
             
@@ -495,7 +514,6 @@ public class ExerciseActivity extends BaseHealthActivity {
                 tvAmount.setTextColor(greenColor);
             }
             if (tvUnit != null) {
-                // [수정] 걸음수면 "보", 아니면 "분"
                 if ("걸음수".equals(log.getExerciseType())) {
                     tvUnit.setText("보");
                 } else {
